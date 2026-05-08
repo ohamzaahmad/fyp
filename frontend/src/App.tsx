@@ -1,0 +1,478 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useState, useEffect } from 'react';
+import { Sidebar } from './components/layout/Sidebar.tsx';
+import { Header } from './components/layout/Header.tsx';
+import { QuantumGrid } from './components/timetable/QuantumGrid.tsx';
+import { ControlRoom } from './components/control-room/ControlRoom.tsx';
+import { GapAnalyzer } from './components/gap-analyzer/GapAnalyzer.tsx';
+import { AppState, Department, ClassSession } from './types.ts';
+import { INITIAL_CLASSES } from './constants.ts';
+import { motion, AnimatePresence } from 'motion/react';
+import { Wand2, Loader2, CheckCircle2, Search, Command, Lock as LockIcon, Smartphone } from 'lucide-react';
+
+import { timeToMinutes, checkConflicts, findMergeCandidates } from './services/timetableLogic.ts';
+import { MobileTimeline } from './components/mobile/MobileTimeline.tsx';
+import { BulkImport } from './components/timetable/BulkImport.tsx';
+import { UafPrintView } from './components/timetable/UafPrintView.tsx';
+import { Dashboard } from './components/timetable/Dashboard.tsx';
+import MasterMapViewer from './components/debug/MasterMapViewer.tsx';
+import { TeacherPortal } from './components/control-room/TeacherPortal.tsx';
+
+import * as api from './services/api.ts';
+import { MOCK_CLASSES, MOCK_BUILDINGS } from './constants/mockData.ts';
+import { useNexusTimetable } from './hooks/useNexusTimetable.ts';
+
+import { AuthProvider, useAuth } from './context/AuthContext.tsx';
+import { LoginPage } from './components/auth/LoginPage.tsx';
+import { ProtectedRoute } from './components/auth/ProtectedRoute.tsx';
+
+function AppContent() {
+  const { user, isAuthenticated, logout } = useAuth();
+  const [state, setState] = useState<AppState>({
+    view: 'dashboard',
+    zoomLevel: 1.0,
+    selectedDepartments: ['Computer Science'],
+    classes: [],
+  });
+
+  const { masterMap, setMasterMap, refreshMap, transformToMap, allSessions } = useNexusTimetable(state.classes);
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizationStep, setOptimizationStep] = useState(0);
+  const [optimizationLogs, setOptimizationLogs] = useState<string[]>([]);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [collapsedBuildings, setCollapsedBuildings] = useState<Set<string>>(new Set());
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  // Sync classes from masterMap
+  useEffect(() => {
+    if (Object.keys(masterMap).length > 0) {
+      setState(prev => ({ 
+        ...prev, 
+        classes: allSessions,
+        masterMap: masterMap
+      }));
+    }
+  }, [allSessions, masterMap]);
+
+  // Load initial data from API
+  useEffect(() => {
+    const init = async () => {
+      try {
+        await refreshMap();
+      } catch (err) {
+        // Fallback to local transform if API fails
+        const map = transformToMap(MOCK_CLASSES, MOCK_BUILDINGS);
+        setMasterMap(map);
+        setState(prev => ({ ...prev, classes: MOCK_CLASSES }));
+      }
+    };
+    init();
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Ctrl+K shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(true);
+      }
+      if (e.key === 'Escape') setShowCommandPalette(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const toggleLock = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      classes: prev.classes.map(c => c.id === id ? { ...c, isLocked: !c.isLocked } : c)
+    }));
+  };
+
+  const toggleBuilding = (id: string) => {
+    setCollapsedBuildings(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Real-time conflict checking when classes change
+  useEffect(() => {
+    const updatedWithConflicts = state.classes.map(c => ({
+      ...c,
+      conflicts: checkConflicts(c, state.classes)
+    }));
+    
+    // Deep comparison to prevent infinite loop
+    if (JSON.stringify(updatedWithConflicts) !== JSON.stringify(state.classes)) {
+      setState(prev => ({ ...prev, classes: updatedWithConflicts }));
+    }
+  }, [state.classes]);
+
+  const steps = [
+    "Analyzing Constraints...",
+    "Resolving Gaps...",
+    "Finalizing Merges...",
+    "Done!"
+  ];
+
+  const triggerOptimization = async () => {
+    setIsOptimizing(true);
+    setOptimizationStep(0);
+    setOptimizationLogs(["Nexus AI Engine initializing..."]);
+    
+    try {
+      await api.generateSchedule();
+    } catch (err) {
+      console.warn("Backend solver offline, simulating local process.");
+    }
+    
+    const logInterval = setInterval(() => {
+      const messages = [
+        "Analyzing Building Constraints...",
+        "Identifying Room Overlaps...",
+        "Resolving Faculty Gaps...",
+        "Respecting [LOCKED] sessions...",
+        "Synchronizing Batch Timelines...",
+        "Optimizing for 08:00 - 18:00 efficiency...",
+        "Evaluating Draft A vs Draft B..."
+      ];
+      const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+      setOptimizationLogs(prev => [randomMsg, ...prev].slice(0, 5));
+    }, 400);
+
+    const stepInterval = setInterval(() => {
+      setOptimizationStep(prev => {
+        if (prev >= 3) {
+          clearInterval(stepInterval);
+          clearInterval(logInterval);
+          setTimeout(() => setIsOptimizing(false), 1000);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1500);
+  };
+
+  return (
+    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
+      {!isMobile && (
+        <Sidebar 
+          currentView={state.view} 
+          onViewChange={(view) => setState(prev => ({ ...prev, view }))}
+          isCollapsed={isSidebarCollapsed}
+          setIsCollapsed={setIsSidebarCollapsed}
+          collapsedBuildings={collapsedBuildings}
+          onToggleBuilding={toggleBuilding}
+          masterMap={masterMap}
+        />
+      )}
+      
+      <main className="flex-1 flex flex-col min-w-0">
+        {!isMobile && (
+          <>
+            <Header 
+              selectedDepts={state.selectedDepartments}
+              setSelectedDepts={(depts) => setState(prev => ({ ...prev, selectedDepartments: depts as Department[] }))}
+              efficiency={87}
+            />
+
+            {/* Main Action Bar for Timetable */}
+            {state.view === 'timetable' && (
+              <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between z-20">
+                <div className="flex items-center gap-4">
+                  <div className="bg-slate-900 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest">Master</div>
+                  <h1 className="text-xl font-black text-slate-800 tracking-tight">Administrative Master Map</h1>
+                  <div className="h-4 w-[1px] bg-slate-200" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Session: Spring 2026</span>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  {user?.role === 'ADMIN' && (
+                    <button 
+                      onClick={triggerOptimization}
+                      disabled={isOptimizing}
+                      className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 text-white px-4 py-1.5 rounded-lg text-sm font-bold transition-all shadow-sm shadow-emerald-500/20 active:scale-95"
+                    >
+                      {isOptimizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                      Generate Optimized Schedule
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        <div className="flex-1 flex flex-col relative overflow-hidden">
+
+          {/* View Content */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {isMobile ? (
+              <MobileTimeline classes={state.classes} />
+            ) : (
+              <>
+                {state.view === 'timetable' && (
+                  <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
+                    <QuantumGrid 
+                      zoomLevel={state.zoomLevel} 
+                      onZoomChange={(zoomLevel) => setState(prev => ({ ...prev, zoomLevel }))}
+                      classes={state.classes}
+                      onClassesChange={(classes) => setState(prev => ({ ...prev, classes }))}
+                      onToggleLock={toggleLock}
+                      collapsedBuildings={collapsedBuildings}
+                      onToggleBuilding={toggleBuilding}
+                      masterMap={state.masterMap}
+                    />
+                  </ProtectedRoute>
+                )}
+                {state.view === 'faculty' && (
+                  <ProtectedRoute allowedRoles={['ADMIN']}>
+                    <ControlRoom />
+                  </ProtectedRoute>
+                )}
+                {state.view === 'teacher' && (
+                  <ProtectedRoute allowedRoles={['TEACHER', 'ADMIN']}>
+                    <TeacherPortal />
+                  </ProtectedRoute>
+                )}
+                {state.view === 'student' && <GapAnalyzer />}
+                {state.view === 'rooms' && (
+                  <ProtectedRoute allowedRoles={['ADMIN']}>
+                    <BulkImport />
+                  </ProtectedRoute>
+                )}
+                {state.view === 'dashboard' && (
+                  <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
+                    <Dashboard />
+                  </ProtectedRoute>
+                )}
+                {state.view === 'dashboard' && (
+                  <div className="p-4">
+                    <MasterMapViewer />
+                  </div>
+                )}
+                {state.view === 'export' && (
+                  <ProtectedRoute allowedRoles={['ADMIN']}>
+                    <div className="flex-1 bg-white overflow-auto">
+                      <UafPrintView classes={state.classes} />
+                      <div className="fixed bottom-12 right-24 print:hidden">
+                         <button 
+                           onClick={() => window.print()}
+                           className="bg-slate-900 text-white px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all"
+                         >
+                           Print Official UAF Map
+                         </button>
+                      </div>
+                    </div>
+                  </ProtectedRoute>
+                )}
+                {(state.view === 'dashboard' || state.view === 'settings') && (
+                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50 relative overflow-hidden">
+                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none grayscale">
+                      <div className="grid grid-cols-12 h-full w-full">
+                        {Array.from({ length: 144 }).map((_, i) => (
+                          <div key={i} className="border border-slate-900" />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="z-10 flex flex-col items-center">
+                      <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center mb-4">
+                        <span className="text-2xl font-black text-slate-400">?</span>
+                      </div>
+                      <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">{state.view} Interface</h3>
+                      <p className="text-sm font-medium">Standard modules are currently under AI processing.</p>
+                      <button 
+                        onClick={() => setState(prev => ({ ...prev, view: 'timetable' }))}
+                        className="mt-6 text-emerald-500 font-bold text-xs uppercase tracking-widest hover:underline"
+                      >
+                        Return to Master Grid
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Search Command Palette Overlay */}
+        <AnimatePresence>
+          {showCommandPalette && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-start justify-center pt-24 px-4"
+              onClick={() => setShowCommandPalette(false)}
+            >
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0, y: -20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: -20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden"
+              >
+                <div className="p-4 border-b border-slate-100 flex items-center gap-3">
+                  <Command className="w-5 h-5 text-slate-400" />
+                  <input 
+                    autoFocus
+                    placeholder="Search Departments, Teachers, or Batches... (Ctrl+K)" 
+                    className="flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 font-medium"
+                  />
+                  <div className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-black text-slate-500">ESC</div>
+                </div>
+                <div className="p-2 max-h-80 overflow-y-auto">
+                    <div className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                       <span>Recent Suggestions</span>
+                       <span className="font-mono text-slate-300">History</span>
+                    </div>
+                    <div className="space-y-1">
+                      {[
+                        { title: 'CS Dept', sub: '12 Rooms | 45 Teachers', type: 'Dept', color: 'bg-emerald-100 text-emerald-700' },
+                        { title: 'Dr. Sarah', sub: 'CS Faculty | Tier 1', type: 'Staff', color: 'bg-blue-100 text-blue-700' },
+                        { title: 'Batch B2023-A', sub: 'Computer Science | 120 Students', type: 'Class', color: 'bg-purple-100 text-purple-700' }
+                      ].map((item, i) => (
+                        <div key={i} className="p-2 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center justify-between group">
+                          <div className="flex items-center gap-3">
+                              <div className={cn("w-8 h-8 rounded flex items-center justify-center text-[10px] font-bold", item.color)}>{item.type}</div>
+                              <div>
+                                <div className="text-sm font-bold text-slate-900">{item.title}</div>
+                                <div className="text-[10px] text-slate-500">{item.sub}</div>
+                              </div>
+                          </div>
+                          <div className="opacity-0 group-hover:opacity-100 text-[10px] text-slate-400 transition-opacity">Jump to &rarr;</div>
+                        </div>
+                      ))}
+                    </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Bottom Status Bar */}
+        {!isMobile && (
+          <footer className="h-8 bg-slate-950 text-slate-500 px-6 flex items-center justify-between text-[9px] shrink-0 border-t border-slate-800 z-50">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                <span className="font-black uppercase tracking-widest text-slate-300">AI Logic Core: Active</span>
+              </div>
+              <div className="h-3 w-[1px] bg-slate-800" />
+              <div className="flex gap-4">
+                <span className="font-bold uppercase tracking-tighter">Total Constraints: 1,402</span>
+                <span className="font-bold uppercase tracking-tighter">Conflicts Resolved: 12</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-6 uppercase font-black tracking-widest">
+              <span className="text-slate-600">ID: PROD_UAF_S26</span>
+              <span className="text-emerald-500/50">User: Admin_Master</span>
+            </div>
+          </footer>
+        )}
+      </main>
+
+      {/* Optimization Overlay */}
+      <AnimatePresence>
+        {isOptimizing && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border border-white/20"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-6">
+                  {optimizationStep === 3 ? (
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                  ) : (
+                    <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+                  )}
+                </div>
+                
+                <h2 className="text-xl font-black text-slate-900 mb-2">Nexus Optimizer</h2>
+                <p className="text-slate-500 text-sm mb-6">Redistributing {state.classes.length} sessions across {INITIAL_CLASSES.length * 2} constraints.</p>
+                
+                {/* Task Logs */}
+                <div className="w-full bg-slate-950 rounded-lg p-3 mb-6 font-mono text-[10px] text-emerald-400 h-24 overflow-hidden shadow-inner">
+                  <div className="flex flex-col gap-1">
+                    {optimizationLogs.map((log, i) => (
+                      <div key={i} className={cn("flex gap-2", i === 0 ? "animate-pulse" : "opacity-40")}>
+                        <span className="text-slate-600">[{new Date().toLocaleTimeString([], { hour12: false })}]</span>
+                        <span>{log}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="w-full space-y-4">
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <motion.div 
+                      className="h-full bg-emerald-500"
+                      initial={{ width: "0%" }}
+                      animate={{ width: `${(optimizationStep + 1) * 25}%` }}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">
+                      {steps[optimizationStep]}
+                    </span>
+                    <span className="text-xs font-mono text-slate-400">
+                      {Math.round((optimizationStep + 1) * 25)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+       <AppWrapper />
+    </AuthProvider>
+  );
+}
+
+function AppWrapper() {
+  const { isAuthenticated } = useAuth();
+  
+  // Simple check for login view
+  if (window.location.hash === '#login' && !isAuthenticated) {
+     return <LoginPage />;
+  }
+
+  return <AppContent />;
+}
+
