@@ -7,11 +7,37 @@ from datetime import datetime
 
 from . import models, serializers
 from .permissions import IsTeacherUser, IsAdminUser
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+from django.contrib.auth import get_user_model
 
 
 class FacultyViewSet(viewsets.ModelViewSet):
     queryset = models.Faculty.objects.all()
     serializer_class = serializers.FacultySerializer
+
+
+class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Allow users to authenticate using either username or email in the same field.
+
+    If the provided identifier looks like an email and a user with that email exists,
+    we replace the username field with the actual username before validation.
+    """
+    def validate(self, attrs):
+        username_field = self.username_field
+        identifier = (attrs.get(username_field, '') or '').strip()
+        if identifier and '@' in identifier:
+            User = get_user_model()
+            # Use filter + first() to avoid MultipleObjectsReturned
+            user = User.objects.filter(email__iexact=identifier).order_by('pk').first()
+            if user:
+                # Replace the identifier with the user's username for authentication
+                attrs[username_field] = getattr(user, username_field)
+        return super().validate(attrs)
+
+
+class EmailOrUsernameTokenObtainPairView(TokenObtainPairView):
+    serializer_class = EmailOrUsernameTokenObtainPairSerializer
 
 
 class BuildingViewSet(viewsets.ModelViewSet):

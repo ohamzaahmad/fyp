@@ -49,37 +49,55 @@ export const QuantumGrid: React.FC<QuantumGridProps> = ({
   );
 
   const displayBuildings = useMemo(() => {
-    let baseMap = masterMap && Object.keys(masterMap).length > 0
-      ? Object.values(masterMap)
-      : BUILDINGS.map(b => ({
-          ...b,
-          floors: b.floors.map(f => ({
-            ...f,
-            rooms: f.rooms.map(r => ({
-              ...r,
-              sessions: classes.filter(s => s.roomId === r.id)
-            }))
+    // Normalize backend `masterMap` (object with nested maps) into an array shape
+    // that matches the client `BUILDINGS` mock (floors: Floor[], rooms: Room[]).
+    let baseMap = [] as any[];
+    if (masterMap && Object.keys(masterMap).length > 0) {
+      baseMap = Object.values(masterMap).map((b: any) => ({
+        id: b.id,
+        name: b.name,
+        floors: Object.values(b.floors || {}).map((f: any) => ({
+          id: f.id,
+          number: f.number,
+          rooms: Object.values(f.rooms || {}).map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            capacity: r.capacity,
+            sessions: r.sessions || []
           }))
-        }));
+        }))
+      }));
+    } else {
+      baseMap = BUILDINGS.map(b => ({
+        ...b,
+        floors: b.floors.map(f => ({
+          ...f,
+          rooms: f.rooms.map(r => ({
+            ...r,
+            sessions: classes.filter(s => s.roomId === r.id)
+          }))
+        }))
+      }));
+    }
 
     // If teacher, only show buildings/rooms where they have a class
     if (user?.role === 'TEACHER') {
       return baseMap.map(b => ({
         ...b,
-        floors: Object.values(b.floors).map(f => ({
+        floors: (b.floors || []).map((f: any) => ({
           ...f,
-          rooms: Object.values(f.rooms).filter(r => 
-            r.sessions.some(s => s.facultyName === user.name)
-          ).map(r => ({
+          rooms: (f.rooms || []).filter((r: any) => 
+            (r.sessions || []).some((s: any) => s.facultyName === user.name)
+          ).map((r: any) => ({
             ...r,
-            sessions: r.sessions.filter(s => s.facultyName === user.name)
+            sessions: (r.sessions || []).filter((s: any) => s.facultyName === user.name)
           }))
-        })).filter(f => f.rooms.length > 0)
-      })).filter(b => b.floors.length > 0);
+        })).filter((f: any) => (f.rooms || []).length > 0)
+      })).filter((b: any) => (b.floors || []).length > 0);
     }
 
     return baseMap;
-  }, [masterMap, classes, user]);
+  }, [masterMap, classes, user]) as any[];
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, delta } = event;
@@ -139,9 +157,9 @@ export const QuantumGrid: React.FC<QuantumGridProps> = ({
 
             {/* Grid Body */}
             <div className="flex-1 flex flex-col">
-              {displayBuildings.map(building => {
+                {displayBuildings.map((building: any) => {
                 const isCollapsed = collapsedBuildings.has(building.id);
-                const buildingFloors = Object.values(building.floors || {});
+                const buildingFloors = Object.values(building.floors || {}) as any[];
                 
                 return (
                   <div key={building.id} className="flex flex-col">
@@ -159,15 +177,15 @@ export const QuantumGrid: React.FC<QuantumGridProps> = ({
                       </div>
                     </div>
  
-                    {!isCollapsed && buildingFloors.map(floor => {
-                      const floorRooms = Object.values(floor.rooms || {});
+                    {!isCollapsed && buildingFloors.map((floor: any) => {
+                      const floorRooms = Object.values(floor.rooms || {}) as any[];
                       return (
                         <React.Fragment key={floor.id}>
                           <div className="h-6 bg-slate-50/50 flex items-center px-8 border-b border-slate-200/50 sticky left-0 z-20">
                              <span className="text-[9px] font-bold uppercase text-slate-400 tracking-tight">Floor {floor.number}</span>
                           </div>
                           
-                          {floorRooms.map(room => {
+                          {floorRooms.map((room: any) => {
                             const roomSessions = room.sessions || [];
                             
                             return (

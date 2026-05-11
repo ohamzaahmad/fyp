@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { ClassSession, Department, Faculty, NexusMasterMap } from '../types.ts';
+import { ClassSession, Department, Faculty, NexusMasterMap, Room } from '../types.ts';
 import { logout, getStoredToken, refreshToken } from './authService.ts';
 
 // Use Vite-provided env var when available, otherwise fall back to relative '/api'
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || '/api';
+const API_BASE_URL = ((import.meta as any).env?.VITE_API_URL as string) || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

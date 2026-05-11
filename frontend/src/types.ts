@@ -36,7 +36,7 @@ export interface ConflictDetail {
 }
 
 export interface ClassSession {
-  isConflict: import("react/jsx-runtime").JSX.Element;
+  isConflict?: import("react/jsx-runtime").JSX.Element | null;
   id: string;
   subjectCode: string;
   subjectName?: string;
@@ -51,7 +51,7 @@ export interface ClassSession {
 }
 
 export interface AppState {
-  view: 'dashboard' | 'timetable' | 'faculty' | 'rooms' | 'student' | 'settings' | 'export';
+  view: 'dashboard' | 'timetable' | 'faculty' | 'rooms' | 'student' | 'settings' | 'export' | 'teacher';
   zoomLevel: number; // 0.5 to 2
   selectedDepartments: Department[];
   classes: ClassSession[];

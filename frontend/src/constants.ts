@@ -1,6 +1,8 @@
 import { Building, Faculty, Department, ClassSession } from './types.ts';
 
-export const DEPARTMENTS: Department[] = [
+const _RUNTIME = (globalThis as any).__NEXUS_DATA__ || {};
+
+export let DEPARTMENTS: Department[] = _RUNTIME.DEPARTMENTS || [
   'Computer Science',
   'Physics',
   'Mathematics',
@@ -8,7 +10,7 @@ export const DEPARTMENTS: Department[] = [
   'Engineering',
 ];
 
-export const BUILDINGS: Building[] = [
+export let BUILDINGS: Building[] = _RUNTIME.BUILDINGS || [
   {
     id: 'b1',
     name: 'Tech Hall',
@@ -70,7 +72,7 @@ export const BUILDINGS: Building[] = [
   },
 ];
 
-export const FACULTY: Faculty[] = [
+export let FACULTY: Faculty[] = _RUNTIME.FACULTY || [
   { id: 'f1', name: 'Dr. Sarah Connor', department: 'Computer Science', tier: 1, requestedSlots: ['08:00', '09:00'] },
   { id: 'f2', name: 'Prof. Albus D.', department: 'Physics', tier: 1, requestedSlots: ['14:00'] },
   { id: 'f3', name: 'Dr. Jane Foster', department: 'Engineering', tier: 2, requestedSlots: [] },
@@ -79,7 +81,7 @@ export const FACULTY: Faculty[] = [
   { id: 'f6', name: 'Prof. Sarah Miller', department: 'Mathematics', tier: 2, requestedSlots: [] },
 ];
 
-export const INITIAL_CLASSES: ClassSession[] = [
+export let INITIAL_CLASSES: ClassSession[] = _RUNTIME.INITIAL_CLASSES || [
   { id: 'c1', subjectCode: 'CS101', batchId: 'B2023-A', facultyId: 'f1', roomId: 'r101', startTime: '08:00', durationMinutes: 90, isLocked: true },
   { id: 'c2', subjectCode: 'PH202', batchId: 'B2023-B', facultyId: 'f2', roomId: 'r102', startTime: '10:00', durationMinutes: 60 },
   { id: 'c3', subjectCode: 'MA303', batchId: 'B2022-C', facultyId: 'f4', roomId: 'r201', startTime: '11:00', durationMinutes: 120 },
@@ -88,3 +90,17 @@ export const INITIAL_CLASSES: ClassSession[] = [
   { id: 'c6', subjectCode: 'CS301', batchId: 'B2021-E', facultyId: 'f5', roomId: 'r201', startTime: '08:30', durationMinutes: 90 },
   { id: 'c7', subjectCode: 'MA101', batchId: 'B2024-F', facultyId: 'f6', roomId: 'r102_b2', startTime: '10:00', durationMinutes: 120 },
 ];
+
+export function setRuntimeData(data: Partial<{ DEPARTMENTS: Department[]; BUILDINGS: Building[]; FACULTY: Faculty[]; INITIAL_CLASSES: ClassSession[] }>) {
+  if (data.DEPARTMENTS) DEPARTMENTS = data.DEPARTMENTS;
+  if (data.BUILDINGS) BUILDINGS = data.BUILDINGS;
+  if (data.FACULTY) FACULTY = data.FACULTY;
+  if (data.INITIAL_CLASSES) INITIAL_CLASSES = data.INITIAL_CLASSES;
+  // Also expose on global for external scripts
+  (globalThis as any).__NEXUS_DATA__ = {
+    DEPARTMENTS,
+    BUILDINGS,
+    FACULTY,
+    INITIAL_CLASSES,
+  };
+}

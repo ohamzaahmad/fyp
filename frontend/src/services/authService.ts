@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Respect Vite env var (full backend URL) or fall back to relative '/api' which will use the dev server proxy.
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || '/api';
+const API_BASE_URL = ((import.meta as any).env?.VITE_API_URL as string) || '/api';
 
 export type UserRole = 'ADMIN' | 'TEACHER' | 'STUDENT';
 
@@ -59,6 +59,15 @@ export const refreshToken = async (): Promise<string> => {
   const { access } = res.data;
   localStorage.setItem('nexus_token', access);
   return access;
+};
+
+export const verifyToken = async (token: string): Promise<boolean> => {
+  try {
+    await axios.post(`${API_BASE_URL}/auth/token/verify/`, { token });
+    return true;
+  } catch (err) {
+    return false;
+  }
 };
 
 export const logout = (): void => {

@@ -15,7 +15,7 @@ import { QuantumGrid } from './components/timetable/QuantumGrid.tsx';
 import { ControlRoom } from './components/control-room/ControlRoom.tsx';
 import { GapAnalyzer } from './components/gap-analyzer/GapAnalyzer.tsx';
 import { AppState, Department, ClassSession } from './types.ts';
-import { INITIAL_CLASSES } from './constants.ts';
+import { INITIAL_CLASSES, setRuntimeData } from './constants.ts';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wand2, Loader2, CheckCircle2, Search, Command, Lock as LockIcon, Smartphone } from 'lucide-react';
 
@@ -30,6 +30,7 @@ import { TeacherPortal } from './components/control-room/TeacherPortal.tsx';
 import * as api from './services/api.ts';
 import { MOCK_CLASSES, MOCK_BUILDINGS } from './constants/mockData.ts';
 import { useNexusTimetable } from './hooks/useNexusTimetable.ts';
+import { cn } from './lib/utils.ts';
 
 import { AuthProvider, useAuth } from './context/AuthContext.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
@@ -70,6 +71,35 @@ function AppContent() {
     const init = async () => {
       try {
         await refreshMap();
+        // Fetch reference data from backend and populate runtime constants
+        try {
+          const [departments, faculty, rooms] = await Promise.all([
+            api.fetchDepartments(),
+            api.fetchFaculty(),
+            api.fetchRooms(),
+          ]);
+
+          // Transform rooms into BUILDINGS structure expected by the app
+          const buildingsMap: Record<string, any> = {};
+          rooms.forEach((r: any) => {
+            const bId = r.buildingId || r.building_id || 'unknown';
+            const fId = r.floorId || r.floor_id || r.floor || 'f1';
+            if (!buildingsMap[bId]) buildingsMap[bId] = { id: bId, name: r.buildingName || bId, floors: {} };
+            if (!buildingsMap[bId].floors[fId]) buildingsMap[bId].floors[fId] = { id: fId, number: r.floorNumber || 1, rooms: [] };
+            buildingsMap[bId].floors[fId].rooms.push({ id: r.id, buildingId: bId, floorId: fId, name: r.name || r.roomName || r.id, capacity: r.capacity || 0 });
+          });
+
+          const BUILDINGS = Object.values(buildingsMap).map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            floors: Object.values(b.floors),
+          }));
+
+          setRuntimeData({ DEPARTMENTS: departments, FACULTY: faculty, BUILDINGS });
+        } catch (err) {
+          // ignore - keep demo constants
+          console.warn('Could not fetch reference data for runtime overrides', err);
+        }
       } catch (err) {
         // Fallback to local transform if API fails
         const map = transformToMap(MOCK_CLASSES, MOCK_BUILDINGS);
@@ -266,10 +296,12 @@ function AppContent() {
                     <Dashboard />
                   </ProtectedRoute>
                 )}
-                {state.view === 'dashboard' && (
-                  <div className="p-4">
-                    <MasterMapViewer />
-                  </div>
+                {state.view === 'mastermap-debug' && (
+                  <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
+                    <div className="p-4">
+                      <MasterMapViewer />
+                    </div>
+                  </ProtectedRoute>
                 )}
                 {state.view === 'export' && (
                   <ProtectedRoute allowedRoles={['ADMIN']}>
@@ -466,11 +498,23 @@ export default function App() {
 }
 
 function AppWrapper() {
-  const { isAuthenticated } = useAuth();
-  
-  // Simple check for login view
-  if (window.location.hash === '#login' && !isAuthenticated) {
-     return <LoginPage />;
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-12 h-12 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  // If user is authenticated but there's a lingering #login hash, clear it
+  if (window.location.hash === '#login') {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
   }
 
   return <AppContent />;

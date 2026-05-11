@@ -16,6 +16,7 @@ import { cn } from '../../lib/utils.ts';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { UserRole } from '../../services/authService.ts';
 import { NexusMasterMap } from '../../types.ts';
+import { Map } from 'lucide-react';
 
 import { BuildingTree } from './BuildingTree.tsx';
 
@@ -33,6 +34,7 @@ const NAV_ITEMS: { id: string; label: string; icon: any; roles?: UserRole[] }[] 
   { id: 'dashboard', label: 'Analytics Core', icon: LayoutDashboard, roles: ['ADMIN', 'TEACHER'] },
   { id: 'timetable', label: 'Master Map', icon: CalendarRange, roles: ['ADMIN', 'TEACHER'] },
   { id: 'faculty', label: 'Faculty Registry', icon: Users, roles: ['ADMIN'] },
+  { id: 'mastermap-debug', label: 'Master Map (Debug)', icon: Map, roles: ['ADMIN', 'TEACHER'] },
   { id: 'teacher', label: 'Teacher Portal', icon: User, roles: ['TEACHER', 'ADMIN'] },
   { id: 'rooms', label: 'Bulk Ingest', icon: FileUp, roles: ['ADMIN'] },
   { id: 'student', label: 'Batch Diagnostic', icon: GraduationCap },
@@ -47,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsCollapsed,
   collapsedBuildings,
   onToggleBuilding 
+  , masterMap
 }) => {
   const { user, logout, isAuthenticated } = useAuth();
 

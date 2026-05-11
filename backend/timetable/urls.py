@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework import routers
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
+from .views import EmailOrUsernameTokenObtainPairView
 from .views import (
     FacultyViewSet,
     BuildingViewSet,
@@ -28,8 +29,9 @@ router.register(r'entries', ScheduleEntryViewSet)
 urlpatterns = [
     path('', include(router.urls)),
     # JWT token endpoints
-    path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/token/', EmailOrUsernameTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
 
     # Protected example endpoints
     path('auth/me/', CurrentUserView.as_view(), name='current-user'),
