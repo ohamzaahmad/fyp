@@ -89,14 +89,14 @@ export const LoginPage: React.FC = () => {
           <div className="mt-8 pt-8 border-t border-slate-50 flex items-center justify-between">
              <div className="flex gap-4">
                 <button 
-                  onClick={() => { setEmail('admin@uaf.edu'); setPassword('password'); }}
+                  onClick={() => { setEmail('admin'); setPassword('password'); }}
                   className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest"
                 >
                   Admin Demo
                 </button>
                 <div className="w-[1px] h-3 bg-slate-200 self-center" />
                 <button 
-                  onClick={() => { setEmail('teacher_nimra@uaf.edu'); setPassword('password'); }}
+                  onClick={() => { setEmail('seed_teacher'); setPassword('password'); }}
                   className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest"
                 >
                   Teacher Demo

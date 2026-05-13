@@ -1,15 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { BUILDINGS, INITIAL_CLASSES } from '../../constants.ts';
-import { ClassSession, Room, NexusMasterMap } from '../../types.ts';
+// Prefer using DataProvider/masterMap; no direct BUILDINGS fallback
+import { ClassSession, Room, MasterMap } from '../../types.ts';
 import { TimeSlotCard } from './TimeSlotCard.tsx';
 import { cn } from '../../lib/utils.ts';
 import { Building as BuildingIcon, Users, Maximize2, Minimize2, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 import { timeToMinutes } from '../../services/timetableLogic.ts';
 import * as api from '../../services/api.ts';
 import { useAuth } from '../../context/AuthContext.tsx';
+import { useData } from '../../context/DataContext.tsx';
 
-interface QuantumGridProps {
+interface TimetableGridProps {
   zoomLevel: number;
   onZoomChange: (zoom: number) => void;
   classes: ClassSession[];
@@ -17,7 +18,7 @@ interface QuantumGridProps {
   onToggleLock: (id: string) => void;
   collapsedBuildings: Set<string>;
   onToggleBuilding: (id: string) => void;
-  masterMap?: NexusMasterMap;
+  masterMap?: MasterMap;
 }
 
 const START_HOUR = 8;
@@ -25,7 +26,7 @@ const END_HOUR = 20;
 const HOURS = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i);
 const MINUTE_WIDTH = 2; // base px per minute
 
-export const QuantumGrid: React.FC<QuantumGridProps> = ({ 
+export const TimetableGrid: React.FC<TimetableGridProps> = ({ 
   zoomLevel, 
   onZoomChange,
   classes,
@@ -36,6 +37,7 @@ export const QuantumGrid: React.FC<QuantumGridProps> = ({
   masterMap
 }) => {
   const { user } = useAuth();
+  const data = useData();
   const pixelsPerMinute = MINUTE_WIDTH * zoomLevel;
   const hourWidth = 60 * pixelsPerMinute;
   const totalWidth = HOURS.length * hourWidth;
@@ -49,10 +51,35 @@ export const QuantumGrid: React.FC<QuantumGridProps> = ({
   );
 
   const displayBuildings = useMemo(() => {
-    // Normalize backend `masterMap` (object with nested maps) into an array shape
-    // that matches the client `BUILDINGS` mock (floors: Floor[], rooms: Room[]).
+    // Normalize data from DataProvider (preferred), then prop masterMap, then demo BUILDINGS
     let baseMap = [] as any[];
-    if (masterMap && Object.keys(masterMap).length > 0) {
+    if (data?.masterMap && Object.keys(data.masterMap).length > 0) {
+      baseMap = Object.values(data.masterMap).map((b: any) => ({
+        id: b.id,
+        name: b.name,
+        floors: Object.values(b.floors || {}).map((f: any) => ({
+          id: f.id,
+          number: f.number,
+          rooms: Object.values(f.rooms || {}).map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            capacity: r.capacity,
+            sessions: r.sessions || []
+          }))
+        }))
+      }));
+    } else if (data?.buildings && data.buildings.length > 0) {
+      baseMap = data.buildings.map((b: any) => ({
+        ...b,
+        floors: (b.floors || []).map((f: any) => ({
+          ...f,
+          rooms: (f.rooms || []).map((r: any) => ({
+            ...r,
+            sessions: classes.filter((s: any) => s.roomId === r.id)
+          }))
+        }))
+      }));
+    } else if (masterMap && Object.keys(masterMap).length > 0) {
       baseMap = Object.values(masterMap).map((b: any) => ({
         id: b.id,
         name: b.name,
@@ -68,16 +95,7 @@ export const QuantumGrid: React.FC<QuantumGridProps> = ({
         }))
       }));
     } else {
-      baseMap = BUILDINGS.map(b => ({
-        ...b,
-        floors: b.floors.map(f => ({
-          ...f,
-          rooms: f.rooms.map(r => ({
-            ...r,
-            sessions: classes.filter(s => s.roomId === r.id)
-          }))
-        }))
-      }));
+      baseMap = [];
     }
 
     // If teacher, only show buildings/rooms where they have a class
@@ -87,17 +105,17 @@ export const QuantumGrid: React.FC<QuantumGridProps> = ({
         floors: (b.floors || []).map((f: any) => ({
           ...f,
           rooms: (f.rooms || []).filter((r: any) => 
-            (r.sessions || []).some((s: any) => s.facultyName === user.name)
+            (r.sessions || []).some((s: any) => (s.teacherName || s.facultyName) === user.name)
           ).map((r: any) => ({
             ...r,
-            sessions: (r.sessions || []).filter((s: any) => s.facultyName === user.name)
+            sessions: (r.sessions || []).filter((s: any) => (s.teacherName || s.facultyName) === user.name)
           }))
         })).filter((f: any) => (f.rooms || []).length > 0)
       })).filter((b: any) => (b.floors || []).length > 0);
     }
 
     return baseMap;
-  }, [masterMap, classes, user]) as any[];
+  }, [masterMap, classes, user, data]) as any[];
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, delta } = event;
@@ -282,3 +300,5 @@ export const QuantumGrid: React.FC<QuantumGridProps> = ({
     </div>
   );
 };
+
+export default TimetableGrid;

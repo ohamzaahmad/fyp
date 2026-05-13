@@ -1,11 +1,22 @@
 export type Department = 'Computer Science' | 'Physics' | 'Mathematics' | 'Arts' | 'Engineering';
 
-export interface Faculty {
+export interface Teacher {
   id: string;
   name: string;
   department: Department;
   tier: 1 | 2 | 3;
   requestedSlots: string[]; // e.g., ['08:00', '10:00']
+}
+
+export interface Batch {
+  id: number;
+  subject_code: string;
+  subject_name?: string;
+  batch_id: string;
+  // Prefer `teacher` but accept legacy `faculty` field for compatibility.
+  teacher?: number | null;
+  faculty?: number | null;
+  weekly_hours: number;
 }
 
 export interface Building {
@@ -41,7 +52,9 @@ export interface ClassSession {
   subjectCode: string;
   subjectName?: string;
   batchId: string;
-  facultyId: string;
+  // Prefer `teacherId`; keep `facultyId` for backwards compatibility.
+  teacherId?: string;
+  facultyId?: string;
   roomId: string;
   startTime: string; // HH:mm
   durationMinutes: number;
@@ -51,11 +64,11 @@ export interface ClassSession {
 }
 
 export interface AppState {
-  view: 'dashboard' | 'timetable' | 'faculty' | 'rooms' | 'student' | 'settings' | 'export' | 'teacher';
+  view: 'dashboard' | 'timetable' | 'teachers' | 'rooms' | 'student' | 'settings' | 'export' | 'teacher' | 'mastermap-debug' | 'admin';
   zoomLevel: number; // 0.5 to 2
   selectedDepartments: Department[];
   classes: ClassSession[];
-  masterMap?: NexusMasterMap;
+  masterMap?: MasterMap;
 }
 
 export interface RoomData {
@@ -77,6 +90,10 @@ export interface BuildingData {
   floors: { [floorId: string]: FloorData };
 }
 
-export interface NexusMasterMap {
+export interface MasterMap {
   [buildingId: string]: BuildingData;
 }
+
+// Backwards compatibility: `Faculty` historically named in older UI
+// mappings. Keep a type alias so incremental renames don't break imports.
+export type Faculty = Teacher;

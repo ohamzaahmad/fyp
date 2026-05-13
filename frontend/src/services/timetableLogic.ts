@@ -1,5 +1,4 @@
-import { ClassSession, ConflictDetail, Faculty } from '../types.ts';
-import { FACULTY } from '../constants.ts';
+import { ClassSession, ConflictDetail, Teacher } from '../types.ts';
 
 /**
  * Converts HH:mm string to total minutes from 00:00
@@ -15,9 +14,11 @@ export const timeToMinutes = (time: string): number => {
  */
 export const checkConflicts = (
   target: ClassSession,
-  others: ClassSession[]
+  others: ClassSession[],
+  teacherList?: Teacher[]
 ): ConflictDetail[] => {
   const conflicts: ConflictDetail[] = [];
+  const teacherPool: Teacher[] = teacherList ?? [];
   const targetStart = timeToMinutes(target.startTime);
   const targetEnd = targetStart + target.durationMinutes;
 
@@ -50,13 +51,13 @@ export const checkConflicts = (
       }
 
       // Teacher Pool Check
-      if (target.facultyId === other.facultyId) {
-        const faculty = FACULTY.find(f => f.id === target.facultyId);
+      if (target.teacherId === other.teacherId || target.facultyId === other.facultyId) {
+        const teacher = teacherPool.find(f => f.id === (target.teacherId || target.facultyId));
         conflicts.push({
           type: 'Teacher',
           severity: 'Critical',
           conflictingWithId: other.id,
-          conflictingWithName: `${faculty?.name} is already booked`
+          conflictingWithName: `${teacher?.name || 'Teacher'} is already booked`
         });
       }
 

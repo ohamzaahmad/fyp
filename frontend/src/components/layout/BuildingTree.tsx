@@ -1,14 +1,16 @@
 import React from 'react';
-import { BUILDINGS } from '../../constants.ts';
+// Use DataProvider/masterMap instead of BUILDINGS constant fallback
 import { Building, DoorOpen, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
-import { NexusMasterMap } from '../../types.ts';
+import { MasterMap } from '../../types.ts';
+import { useData } from '../../context/DataContext.tsx';
 
 interface BuildingTreeProps {
   collapsedBuildings: Set<string>;
   onToggleBuilding: (id: string) => void;
   isSidebarCollapsed: boolean;
   masterMap?: NexusMasterMap;
+  masterMap?: MasterMap;
 }
 
 
@@ -25,15 +27,16 @@ export const BuildingTree: React.FC<BuildingTreeProps> = ({
   , masterMap
 }) => {
   if (isSidebarCollapsed) return null;
-  // Use backend `masterMap` when available; otherwise, fall back to demo `BUILDINGS`.
-  const buildingsSource: any[] = masterMap && Object.keys(masterMap).length > 0
-    ? Object.values(masterMap)
-    : BUILDINGS;
+  const data = useData();
+  // Prefer DataProvider buildings when available, then prop masterMap, then demo BUILDINGS
+  const buildingsSource: any[] = (data?.buildings && data.buildings.length > 0)
+    ? data.buildings
+    : (masterMap && Object.keys(masterMap).length > 0 ? Object.values(masterMap) : []);
   return (
     <div className="mt-8 px-3">
       <div className="flex items-center justify-between mb-4 px-2">
         <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Building View</h3>
-        <span className="text-[9px] font-bold text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">Total: {BUILDINGS.length}</span>
+        <span className="text-[9px] font-bold text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">Total: {buildingsSource.length}</span>
       </div>
 
       <div className="space-y-2">

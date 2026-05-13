@@ -1,9 +1,10 @@
 import React from 'react';
 import { Sparkles, Users, FileBarChart, Check, Trash2, ArrowUpRight } from 'lucide-react';
-import { FACULTY } from '../../constants.ts';
+import { useData } from '../../context/DataContext.tsx';
 import { cn } from '../../lib/utils.ts';
 
 export const ControlRoom: React.FC = () => {
+  const { teachers = [] } = useData();
   return (
     <div className="flex-1 p-8 bg-slate-50 flex gap-8">
       {/* Main Panel */}
@@ -19,8 +20,8 @@ export const ControlRoom: React.FC = () => {
 
           <div className="grid gap-4">
             {[
-              { id: 1, subject: 'CS101', faculty: 'Dr. Sarah Connor', sections: ['B2023-A', 'B2023-B'], efficiencyGain: '+15%' },
-              { id: 2, subject: 'MA303', faculty: 'Prof. Charles X.', sections: ['B2022-C', 'B2022-D'], efficiencyGain: '+22%' },
+              { id: 1, subject: 'CS101', teacher: 'Dr. Sarah Connor', sections: ['B2023-A', 'B2023-B'], efficiencyGain: '+15%' },
+              { id: 2, subject: 'MA303', teacher: 'Prof. Charles X.', sections: ['B2022-C', 'B2022-D'], efficiencyGain: '+22%' },
             ].map((rec) => (
               <div key={rec.id} className="bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-4">
@@ -32,7 +33,7 @@ export const ControlRoom: React.FC = () => {
                       <span className="font-bold text-slate-900">{rec.subject}</span>
                       <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[10px] font-black uppercase">Merge Pot.</span>
                     </div>
-                    <p className="text-xs text-slate-500">{rec.faculty} • {rec.sections.join(' & ')}</p>
+                    <p className="text-xs text-slate-500">{rec.teacher} • {rec.sections.join(' & ')}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -52,7 +53,7 @@ export const ControlRoom: React.FC = () => {
 
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">Faculty Priorities</h2>
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">Teacher Priorities</h2>
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-emerald-500" />
               <span className="text-[10px] font-bold text-slate-400 uppercase">Tier 1 Optimized</span>
@@ -63,14 +64,14 @@ export const ControlRoom: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Faculty Name</th>
+                  <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Teacher Name</th>
                   <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dept</th>
                   <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global Priority</th>
                   <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {FACULTY.map((f) => (
+                {(teachers || []).map((f) => (
                   <tr key={f.id} className="group hover:bg-slate-50/50">
                     <td className="px-6 py-3 font-bold text-slate-900 text-sm">{f.name}</td>
                     <td className="px-6 py-3 text-xs text-slate-500">{f.department}</td>
@@ -124,7 +125,7 @@ export const ControlRoom: React.FC = () => {
                 <Check className="w-4 h-4 text-emerald-500" />
               </div>
               <div className="flex items-center justify-between text-xs font-bold text-slate-400">
-                <span>Faculty Overlap Check</span>
+                        <span>Teacher Overlap Check</span>
                 <Check className="w-4 h-4 text-emerald-500" />
               </div>
             </div>

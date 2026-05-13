@@ -11,28 +11,30 @@
 import { useState, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar.tsx';
 import { Header } from './components/layout/Header.tsx';
-import { QuantumGrid } from './components/timetable/QuantumGrid.tsx';
+import TimetableGrid from './components/timetable/TimetableGrid.tsx';
 import { ControlRoom } from './components/control-room/ControlRoom.tsx';
 import { GapAnalyzer } from './components/gap-analyzer/GapAnalyzer.tsx';
 import { AppState, Department, ClassSession } from './types.ts';
-import { INITIAL_CLASSES, setRuntimeData } from './constants.ts';
+import { DataProvider, useData } from './context/DataContext.tsx';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wand2, Loader2, CheckCircle2, Search, Command, Lock as LockIcon, Smartphone } from 'lucide-react';
 
 import { timeToMinutes, checkConflicts, findMergeCandidates } from './services/timetableLogic.ts';
 import { MobileTimeline } from './components/mobile/MobileTimeline.tsx';
 import { BulkImport } from './components/timetable/BulkImport.tsx';
-import { UafPrintView } from './components/timetable/UafPrintView.tsx';
+import TimetablePrintView from './components/timetable/TimetablePrintView.tsx';
 import { Dashboard } from './components/timetable/Dashboard.tsx';
 import MasterMapViewer from './components/debug/MasterMapViewer.tsx';
 import { TeacherPortal } from './components/control-room/TeacherPortal.tsx';
+import AdminConsole from './components/admin/AdminConsole.tsx';
 
 import * as api from './services/api.ts';
-import { MOCK_CLASSES, MOCK_BUILDINGS } from './constants/mockData.ts';
 import { useNexusTimetable } from './hooks/useNexusTimetable.ts';
 import { cn } from './lib/utils.ts';
 
 import { AuthProvider, useAuth } from './context/AuthContext.tsx';
+import { ToastProvider } from './components/ui/Toast.tsx';
+import Settings from './components/settings/Settings.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
 import { ProtectedRoute } from './components/auth/ProtectedRoute.tsx';
 
@@ -46,8 +48,27 @@ function AppContent() {
   });
 
   const { masterMap, setMasterMap, refreshMap, transformToMap, allSessions } = useNexusTimetable(state.classes);
+  const data = useData();
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  useEffect(() => {
+    // initialize header visibility from localStorage
+    const storedHeader = typeof window !== 'undefined' ? localStorage.getItem('nexus_header_visible') : null;
+    if (storedHeader !== null) setIsHeaderVisible(storedHeader === 'true');
+
+    const onSettings = (e: any) => {
+      if (e?.detail?.headerVisible !== undefined) setIsHeaderVisible(!!e.detail.headerVisible);
+    };
+    window.addEventListener('nexus:settings-updated', onSettings as EventListener);
+    return () => window.removeEventListener('nexus:settings-updated', onSettings as EventListener);
+  }, []);
+
+  useEffect(() => {
+    const openSettings = () => setState(prev => ({ ...prev, view: 'settings' }));
+    window.addEventListener('nexus:open-settings', openSettings as EventListener);
+    return () => window.removeEventListener('nexus:open-settings', openSettings as EventListener);
+  }, []);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationStep, setOptimizationStep] = useState(0);
   const [optimizationLogs, setOptimizationLogs] = useState<string[]>([]);
@@ -66,49 +87,12 @@ function AppContent() {
     }
   }, [allSessions, masterMap]);
 
-  // Load initial data from API
+  // Sync masterMap from DataProvider when available
   useEffect(() => {
-    const init = async () => {
-      try {
-        await refreshMap();
-        // Fetch reference data from backend and populate runtime constants
-        try {
-          const [departments, faculty, rooms] = await Promise.all([
-            api.fetchDepartments(),
-            api.fetchFaculty(),
-            api.fetchRooms(),
-          ]);
-
-          // Transform rooms into BUILDINGS structure expected by the app
-          const buildingsMap: Record<string, any> = {};
-          rooms.forEach((r: any) => {
-            const bId = r.buildingId || r.building_id || 'unknown';
-            const fId = r.floorId || r.floor_id || r.floor || 'f1';
-            if (!buildingsMap[bId]) buildingsMap[bId] = { id: bId, name: r.buildingName || bId, floors: {} };
-            if (!buildingsMap[bId].floors[fId]) buildingsMap[bId].floors[fId] = { id: fId, number: r.floorNumber || 1, rooms: [] };
-            buildingsMap[bId].floors[fId].rooms.push({ id: r.id, buildingId: bId, floorId: fId, name: r.name || r.roomName || r.id, capacity: r.capacity || 0 });
-          });
-
-          const BUILDINGS = Object.values(buildingsMap).map((b: any) => ({
-            id: b.id,
-            name: b.name,
-            floors: Object.values(b.floors),
-          }));
-
-          setRuntimeData({ DEPARTMENTS: departments, FACULTY: faculty, BUILDINGS });
-        } catch (err) {
-          // ignore - keep demo constants
-          console.warn('Could not fetch reference data for runtime overrides', err);
-        }
-      } catch (err) {
-        // Fallback to local transform if API fails
-        const map = transformToMap(MOCK_CLASSES, MOCK_BUILDINGS);
-        setMasterMap(map);
-        setState(prev => ({ ...prev, classes: MOCK_CLASSES }));
-      }
-    };
-    init();
-  }, []);
+    if (data?.masterMap && Object.keys(data.masterMap).length > 0) {
+      setMasterMap(data.masterMap);
+    }
+  }, [data?.masterMap, setMasterMap]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -149,7 +133,7 @@ function AppContent() {
   useEffect(() => {
     const updatedWithConflicts = state.classes.map(c => ({
       ...c,
-      conflicts: checkConflicts(c, state.classes)
+      conflicts: checkConflicts(c, state.classes, data?.teachers)
     }));
     
     // Deep comparison to prevent infinite loop
@@ -180,7 +164,7 @@ function AppContent() {
       const messages = [
         "Analyzing Building Constraints...",
         "Identifying Room Overlaps...",
-        "Resolving Faculty Gaps...",
+        "Resolving Teacher Gaps...",
         "Respecting [LOCKED] sessions...",
         "Synchronizing Batch Timelines...",
         "Optimizing for 08:00 - 18:00 efficiency...",
@@ -214,43 +198,29 @@ function AppContent() {
           collapsedBuildings={collapsedBuildings}
           onToggleBuilding={toggleBuilding}
           masterMap={masterMap}
+          isHeaderVisible={isHeaderVisible}
+          onToggleHeader={() => setIsHeaderVisible(v => !v)}
         />
       )}
       
       <main className="flex-1 flex flex-col min-w-0">
         {!isMobile && (
-          <>
-            <Header 
-              selectedDepts={state.selectedDepartments}
-              setSelectedDepts={(depts) => setState(prev => ({ ...prev, selectedDepartments: depts as Department[] }))}
-              efficiency={87}
-            />
+        <>
+            {isHeaderVisible && (
+              <Header 
+                selectedDepts={state.selectedDepartments}
+                setSelectedDepts={(depts) => setState(prev => ({ ...prev, selectedDepartments: depts as Department[] }))}
+                efficiency={87}
+              />
+            )}
 
             {/* Main Action Bar for Timetable */}
-            {state.view === 'timetable' && (
-              <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between z-20">
-                <div className="flex items-center gap-4">
-                  <div className="bg-slate-900 text-white px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest">Master</div>
-                  <h1 className="text-xl font-black text-slate-800 tracking-tight">Administrative Master Map</h1>
-                  <div className="h-4 w-[1px] bg-slate-200" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Session: Spring 2026</span>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  {user?.role === 'ADMIN' && (
-                    <button 
-                      onClick={triggerOptimization}
-                      disabled={isOptimizing}
-                      className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 text-white px-4 py-1.5 rounded-lg text-sm font-bold transition-all shadow-sm shadow-emerald-500/20 active:scale-95"
-                    >
-                      {isOptimizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                      Generate Optimized Schedule
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </>
+                {state.view === 'settings' && (
+                  <ProtectedRoute allowedRoles={["ADMIN"]}>
+                    <Settings />
+                  </ProtectedRoute>
+                )}
+            </>
         )}
 
         <div className="flex-1 flex flex-col relative overflow-hidden">
@@ -263,7 +233,7 @@ function AppContent() {
               <>
                 {state.view === 'timetable' && (
                   <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
-                    <QuantumGrid 
+                    <TimetableGrid 
                       zoomLevel={state.zoomLevel} 
                       onZoomChange={(zoomLevel) => setState(prev => ({ ...prev, zoomLevel }))}
                       classes={state.classes}
@@ -275,9 +245,14 @@ function AppContent() {
                     />
                   </ProtectedRoute>
                 )}
-                {state.view === 'faculty' && (
+                {state.view === 'teachers' && (
                   <ProtectedRoute allowedRoles={['ADMIN']}>
                     <ControlRoom />
+                  </ProtectedRoute>
+                )}
+                {state.view === 'admin' && (
+                  <ProtectedRoute allowedRoles={['ADMIN']}>
+                    <AdminConsole />
                   </ProtectedRoute>
                 )}
                 {state.view === 'teacher' && (
@@ -306,7 +281,7 @@ function AppContent() {
                 {state.view === 'export' && (
                   <ProtectedRoute allowedRoles={['ADMIN']}>
                     <div className="flex-1 bg-white overflow-auto">
-                      <UafPrintView classes={state.classes} />
+                      <TimetablePrintView classes={state.classes} />
                       <div className="fixed bottom-12 right-24 print:hidden">
                          <button 
                            onClick={() => window.print()}
@@ -318,30 +293,7 @@ function AppContent() {
                     </div>
                   </ProtectedRoute>
                 )}
-                {(state.view === 'dashboard' || state.view === 'settings') && (
-                  <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50 relative overflow-hidden">
-                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none grayscale">
-                      <div className="grid grid-cols-12 h-full w-full">
-                        {Array.from({ length: 144 }).map((_, i) => (
-                          <div key={i} className="border border-slate-900" />
-                        ))}
-                      </div>
-                    </div>
-                    <div className="z-10 flex flex-col items-center">
-                      <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center mb-4">
-                        <span className="text-2xl font-black text-slate-400">?</span>
-                      </div>
-                      <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">{state.view} Interface</h3>
-                      <p className="text-sm font-medium">Standard modules are currently under AI processing.</p>
-                      <button 
-                        onClick={() => setState(prev => ({ ...prev, view: 'timetable' }))}
-                        className="mt-6 text-emerald-500 font-bold text-xs uppercase tracking-widest hover:underline"
-                      >
-                        Return to Master Grid
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/* settings view is rendered above inside the header area via <Settings /> */}
               </>
             )}
           </div>
@@ -381,7 +333,7 @@ function AppContent() {
                     <div className="space-y-1">
                       {[
                         { title: 'CS Dept', sub: '12 Rooms | 45 Teachers', type: 'Dept', color: 'bg-emerald-100 text-emerald-700' },
-                        { title: 'Dr. Sarah', sub: 'CS Faculty | Tier 1', type: 'Staff', color: 'bg-blue-100 text-blue-700' },
+                        { title: 'Dr. Sarah', sub: 'CS Teacher | Tier 1', type: 'Staff', color: 'bg-blue-100 text-blue-700' },
                         { title: 'Batch B2023-A', sub: 'Computer Science | 120 Students', type: 'Class', color: 'bg-purple-100 text-purple-700' }
                       ].map((item, i) => (
                         <div key={i} className="p-2 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center justify-between group">
@@ -448,7 +400,7 @@ function AppContent() {
                 </div>
                 
                 <h2 className="text-xl font-black text-slate-900 mb-2">Nexus Optimizer</h2>
-                <p className="text-slate-500 text-sm mb-6">Redistributing {state.classes.length} sessions across {INITIAL_CLASSES.length * 2} constraints.</p>
+                <p className="text-slate-500 text-sm mb-6">Redistributing {state.classes.length} sessions across {(data?.initialClasses.length ?? 0) * 2} constraints.</p>
                 
                 {/* Task Logs */}
                 <div className="w-full bg-slate-950 rounded-lg p-3 mb-6 font-mono text-[10px] text-emerald-400 h-24 overflow-hidden shadow-inner">
@@ -492,7 +444,11 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-       <AppWrapper />
+      <DataProvider>
+        <ToastProvider>
+          <AppWrapper />
+        </ToastProvider>
+      </DataProvider>
     </AuthProvider>
   );
 }

@@ -1,8 +1,8 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { ClassSession, Faculty } from '../../types.ts';
-import { FACULTY } from '../../constants.ts';
+import { ClassSession, Teacher } from '../../types.ts';
+import { useData } from '../../context/DataContext.tsx';
 import { cn } from '../../lib/utils.ts';
 import { AlertCircle, Layers, Lock, Unlock } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -22,13 +22,15 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
   onToggleLock
 }) => {
   const { user } = useAuth();
+  const data = useData();
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: session.id,
     data: session,
     disabled: session.isLocked || user?.role === 'TEACHER'
   });
 
-  const faculty = FACULTY.find(f => f.id === session.facultyId);
+  const teacherId = session.teacherId || session.facultyId;
+  const teacher = data?.teachers.find((t: Teacher) => t.id === teacherId) || data?.faculty.find((f: any) => f.id === teacherId);
   const width = session.durationMinutes * pixelsPerMinute;
   
   const style = {
@@ -107,7 +109,7 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
               {session.batchId}
             </div>
             <div className="text-slate-500 truncate text-[8px] font-bold uppercase tracking-tight">
-              {faculty?.name}
+              {teacher?.name}
             </div>
           </div>
         )}

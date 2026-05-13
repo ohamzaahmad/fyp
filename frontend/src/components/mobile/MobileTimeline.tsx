@@ -1,6 +1,6 @@
 import React from 'react';
-import { ClassSession, Faculty } from '../../types.ts';
-import { FACULTY } from '../../constants.ts';
+import { ClassSession, Teacher } from '../../types.ts';
+import { useData } from '../../context/DataContext.tsx';
 import { cn } from '../../lib/utils.ts';
 import { Clock, MapPin, User, BookOpen } from 'lucide-react';
 import { timeToMinutes } from '../../services/timetableLogic.ts';
@@ -10,6 +10,7 @@ interface MobileTimelineProps {
 }
 
 export const MobileTimeline: React.FC<MobileTimelineProps> = ({ classes }) => {
+  const data = useData();
   const sortedClasses = [...classes].sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
   return (
@@ -27,7 +28,8 @@ export const MobileTimeline: React.FC<MobileTimelineProps> = ({ classes }) => {
           </div>
         ) : (
           sortedClasses.map((session, idx) => {
-            const faculty = FACULTY.find(f => f.id === session.facultyId);
+            const teacherId = session.teacherId || session.facultyId;
+            const teacher = data?.teachers.find((t: Teacher) => t.id === teacherId) || data?.faculty.find((f: any) => f.id === teacherId);
             
             return (
               <div 
@@ -57,7 +59,7 @@ export const MobileTimeline: React.FC<MobileTimelineProps> = ({ classes }) => {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-slate-500">
                       <User className="w-3.5 h-3.5" />
-                      <span className="text-[11px] font-bold">{faculty?.name}</span>
+                      <span className="text-[11px] font-bold">{teacher?.name}</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-500">
                       <MapPin className="w-3.5 h-3.5" />

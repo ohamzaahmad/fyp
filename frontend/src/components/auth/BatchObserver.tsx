@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { getMasterTimetable } from '../../services/api.ts';
+import { getMasterTimetable, getBatchDiagnostic } from '../../services/api.ts';
 import { NexusMasterMap } from '../../types.ts';
+import { useToast } from '../ui/Toast.tsx';
 
 export const BatchObserver: React.FC = () => {
   const [map, setMap] = useState<NexusMasterMap | null>(null);
@@ -9,6 +10,8 @@ export const BatchObserver: React.FC = () => {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diagnostic, setDiagnostic] = useState<any | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     const load = async () => {
@@ -53,6 +56,21 @@ export const BatchObserver: React.FC = () => {
     setSessions(out.sort((a, b) => a.startTime.localeCompare(b.startTime)));
   }, [map, selected]);
 
+  const runDiagnostic = async () => {
+    if (!selected) return;
+    setLoading(true);
+    try {
+      const res = await getBatchDiagnostic(selected);
+      setDiagnostic(res);
+      try { toast.show(`Diagnostic complete: ${res.continuity}% continuity`, 'success'); } catch (_) {}
+    } catch (e: any) {
+      setError(e?.message || String(e));
+      try { toast.show(`Diagnostic failed: ${e?.message || String(e)}`, 'error'); } catch(_) {}
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="mt-6 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
       <div className="flex items-center justify-between mb-2">
@@ -73,6 +91,10 @@ export const BatchObserver: React.FC = () => {
           {selected && (
             <div className="text-xs">
               <div className="mb-2 text-slate-600">Sessions for <strong>{selected}</strong> ({sessions.length})</div>
+              <div className="mb-3 flex items-center gap-3">
+                <button onClick={runDiagnostic} className="text-xs bg-slate-100 px-3 py-1 rounded text-slate-700 hover:bg-slate-50">Run Diagnostic</button>
+                {diagnostic && <div className="text-[11px] text-slate-500">Continuity: <strong className="ml-1">{diagnostic.continuity}%</strong> • Sessions: <strong>{diagnostic.sessions}</strong></div>}
+              </div>
               <ul className="space-y-2 max-h-48 overflow-auto">
                 {sessions.map(s => (
                   <li key={s.id} className="p-2 bg-slate-50 rounded">

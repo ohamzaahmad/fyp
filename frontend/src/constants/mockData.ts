@@ -1,6 +1,6 @@
-import { Faculty, Room, Building, ClassSession } from '../types.ts';
+import { Teacher, Room, Building, ClassSession } from '../types.ts';
 
-export const MOCK_FACULTY: Faculty[] = [
+export const MOCK_TEACHERS: Teacher[] = [
   { id: 'f_nimra', name: 'Ms. Nimra Razzaq', department: 'Computer Science', tier: 1, requestedSlots: ['08:00', '09:40'] },
   { id: 'f_amara', name: 'Ms. Amara Rafique', department: 'Computer Science', tier: 1, requestedSlots: ['13:10', '14:50'] },
   { id: 'f_anam', name: 'Miss. Anam Khalid', department: 'Computer Science', tier: 2, requestedSlots: ['11:20'] },
@@ -54,18 +54,18 @@ export const MOCK_BUILDINGS: Building[] = [
 
 export const MOCK_CLASSES: ClassSession[] = [
   // Monday G-Floor R#1
-  { id: 's1', subjectCode: 'CS-506-T', subjectName: 'Software Engineering', batchId: 'BSCS-6th-M3', facultyId: 'f_nimra', roomId: 'r1', startTime: '09:40', durationMinutes: 100 },
-  { id: 's2', subjectCode: 'CS-408-T', subjectName: 'Database Systems', batchId: 'BSIT-4th-M2', facultyId: 'f_anam', roomId: 'r1', startTime: '11:20', durationMinutes: 100 },
-  { id: 's3', subjectCode: 'CS-406-T', subjectName: 'Operating Systems', batchId: 'BSCS-4th-E1', facultyId: 'f_amara', roomId: 'r1', startTime: '13:10', durationMinutes: 100 },
-  { id: 's4', subjectCode: 'IT-504-P', subjectName: 'Web Programming Lab', batchId: 'BSIT-6th-E1', facultyId: 'f_amara', roomId: 'r1', startTime: '14:50', durationMinutes: 100 },
+  { id: 's1', subjectCode: 'CS-506-T', subjectName: 'Software Engineering', batchId: 'BSCS-6th-M3', facultyId: 'f_nimra', teacherId: 'f_nimra', roomId: 'r1', startTime: '09:40', durationMinutes: 100 },
+  { id: 's2', subjectCode: 'CS-408-T', subjectName: 'Database Systems', batchId: 'BSIT-4th-M2', facultyId: 'f_anam', teacherId: 'f_anam', roomId: 'r1', startTime: '11:20', durationMinutes: 100 },
+  { id: 's3', subjectCode: 'CS-406-T', subjectName: 'Operating Systems', batchId: 'BSCS-4th-E1', facultyId: 'f_amara', teacherId: 'f_amara', roomId: 'r1', startTime: '13:10', durationMinutes: 100 },
+  { id: 's4', subjectCode: 'IT-504-P', subjectName: 'Web Programming Lab', batchId: 'BSIT-6th-E1', facultyId: 'f_amara', teacherId: 'f_amara', roomId: 'r1', startTime: '14:50', durationMinutes: 100 },
   
   // Monday G-Floor R#2
-  { id: 's5', subjectCode: 'CS-306-T', subjectName: 'Programming Fund.', batchId: 'BSDS-2nd-M1', facultyId: 'f_anam', roomId: 'r2', startTime: '08:00', durationMinutes: 100 },
-  { id: 's6', subjectCode: 'CS-408-T', subjectName: 'Database Systems', batchId: 'BSCS-4th-M1', facultyId: 'f_raheela', roomId: 'r2', startTime: '09:40', durationMinutes: 100 },
-  { id: 's7', subjectCode: 'IT-512-T', subjectName: 'Network Security', batchId: 'BSIT-6th-M2', facultyId: 'f_iram', roomId: 'r2', startTime: '11:20', durationMinutes: 100 },
+  { id: 's5', subjectCode: 'CS-306-T', subjectName: 'Programming Fund.', batchId: 'BSDS-2nd-M1', facultyId: 'f_anam', teacherId: 'f_anam', roomId: 'r2', startTime: '08:00', durationMinutes: 100 },
+  { id: 's6', subjectCode: 'CS-408-T', subjectName: 'Database Systems', batchId: 'BSCS-4th-M1', facultyId: 'f_raheela', teacherId: 'f_raheela', roomId: 'r2', startTime: '09:40', durationMinutes: 100 },
+  { id: 's7', subjectCode: 'IT-512-T', subjectName: 'Network Security', batchId: 'BSIT-6th-M2', facultyId: 'f_iram', teacherId: 'f_iram', roomId: 'r2', startTime: '11:20', durationMinutes: 100 },
   
   // Monday Second Floor Lab#1
-  { id: 's8', subjectCode: 'SE-510-T', subjectName: 'Software Quality Assurance', batchId: 'BSSE-6th-M1', facultyId: 'f_raheela', roomId: 'lab1_f2', startTime: '08:00', durationMinutes: 100 },
-  { id: 's9', subjectCode: 'SE-504-P', subjectName: 'Mobile App Dev Lab', batchId: 'BSSE-6th-M2', facultyId: 'f_m_ahsan', roomId: 'lab1_f2', startTime: '09:40', durationMinutes: 100 },
-  { id: 's10', subjectCode: 'CS-509-P', subjectName: 'AI Lab', batchId: 'BSBI-6th-M1', facultyId: 'f_m_ahsan', roomId: 'lab1_f2', startTime: '11:20', durationMinutes: 100 },
+  { id: 's8', subjectCode: 'SE-510-T', subjectName: 'Software Quality Assurance', batchId: 'BSSE-6th-M1', facultyId: 'f_raheela', teacherId: 'f_raheela', roomId: 'lab1_f2', startTime: '08:00', durationMinutes: 100 },
+  { id: 's9', subjectCode: 'SE-504-P', subjectName: 'Mobile App Dev Lab', batchId: 'BSSE-6th-M2', facultyId: 'f_m_ahsan', teacherId: 'f_m_ahsan', roomId: 'lab1_f2', startTime: '09:40', durationMinutes: 100 },
+  { id: 's10', subjectCode: 'CS-509-P', subjectName: 'AI Lab', batchId: 'BSBI-6th-M1', facultyId: 'f_m_ahsan', teacherId: 'f_m_ahsan', roomId: 'lab1_f2', startTime: '11:20', durationMinutes: 100 },
 ];

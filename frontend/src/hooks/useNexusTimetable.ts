@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { 
   ClassSession, 
-  NexusMasterMap, 
+  MasterMap, 
   BuildingData, 
   FloorData, 
   RoomData,
@@ -15,13 +15,13 @@ import * as api from '../services/api.ts';
  * Handles complex nesting (Building > Floor > Room) efficient ingestion
  */
 export function useNexusTimetable(initialClasses: ClassSession[]) {
-  const [masterMap, setMasterMap] = useState<NexusMasterMap>({});
+  const [masterMap, setMasterMap] = useState<MasterMap>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Helper to transform flat array into nested structure (for legacy/demo support)
-  const transformToMap = useCallback((sessions: ClassSession[], buildings: Building[]): NexusMasterMap => {
-    const map: NexusMasterMap = {};
+  const transformToMap = useCallback((sessions: ClassSession[], buildings: Building[]): MasterMap => {
+    const map: MasterMap = {};
 
     buildings.forEach(b => {
       const bData: BuildingData = { id: b.id, name: b.name, floors: {} };

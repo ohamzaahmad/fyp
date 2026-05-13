@@ -12,10 +12,11 @@ import {
   User,
   LogOut
 } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { UserRole } from '../../services/authService.ts';
-import { NexusMasterMap } from '../../types.ts';
+import { MasterMap } from '../../types.ts';
 import { Map } from 'lucide-react';
 
 import { BuildingTree } from './BuildingTree.tsx';
@@ -27,13 +28,16 @@ interface SidebarProps {
   setIsCollapsed: (collapsed: boolean) => void;
   collapsedBuildings: Set<string>;
   onToggleBuilding: (id: string) => void;
-  masterMap?: NexusMasterMap;
+  masterMap?: MasterMap;
+  isHeaderVisible?: boolean;
+  onToggleHeader?: () => void;
 }
 
 const NAV_ITEMS: { id: string; label: string; icon: any; roles?: UserRole[] }[] = [
   { id: 'dashboard', label: 'Analytics Core', icon: LayoutDashboard, roles: ['ADMIN', 'TEACHER'] },
   { id: 'timetable', label: 'Master Map', icon: CalendarRange, roles: ['ADMIN', 'TEACHER'] },
-  { id: 'faculty', label: 'Faculty Registry', icon: Users, roles: ['ADMIN'] },
+  { id: 'teachers', label: 'Teacher Registry', icon: Users, roles: ['ADMIN'] },
+  { id: 'admin', label: 'Admin Console', icon: Users, roles: ['ADMIN'] },
   { id: 'mastermap-debug', label: 'Master Map (Debug)', icon: Map, roles: ['ADMIN', 'TEACHER'] },
   { id: 'teacher', label: 'Teacher Portal', icon: User, roles: ['TEACHER', 'ADMIN'] },
   { id: 'rooms', label: 'Bulk Ingest', icon: FileUp, roles: ['ADMIN'] },
@@ -48,8 +52,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed, 
   setIsCollapsed,
   collapsedBuildings,
-  onToggleBuilding 
-  , masterMap
+  onToggleBuilding,
+  isHeaderVisible = true,
+  onToggleHeader,
+  masterMap
 }) => {
   const { user, logout, isAuthenticated } = useAuth();
 
@@ -120,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="p-4 border-t border-slate-800 bg-slate-900/20">
         {!isCollapsed && user ? (
-          <div className="flex items-center gap-3 bg-slate-800/30 p-2 rounded border border-slate-700/50 group">
+            <div className="flex items-center gap-3 bg-slate-800/30 p-2 rounded border border-slate-700/50 group">
             <div className="w-7 h-7 rounded bg-emerald-500/10 flex items-center justify-center text-[10px] font-black text-emerald-500">
               {user.name.split(' ').map(n => n[0]).join('')}
             </div>
@@ -128,13 +134,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <p className="text-[10px] font-black text-slate-200 uppercase tracking-tighter truncate">{user.name}</p>
               <p className="text-[9px] font-bold text-slate-500 uppercase truncate tracking-widest">{user.role}</p>
             </div>
-            <button 
-              onClick={logout}
-              className="p-1 hover:bg-rose-500/10 hover:text-rose-500 rounded transition-colors"
-              title="Logout"
-            >
-               <LogOut className="w-3 h-3" />
-            </button>
+            <div className="flex items-center gap-2">
+              {onToggleHeader && (
+                <button
+                  onClick={onToggleHeader}
+                  className="p-1 hover:bg-slate-800 rounded transition-colors"
+                  title={isHeaderVisible ? 'Hide top bar' : 'Show top bar'}
+                >
+                  {isHeaderVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                </button>
+              )}
+              <button 
+                onClick={logout}
+                className="p-1 hover:bg-rose-500/10 hover:text-rose-500 rounded transition-colors"
+                title="Logout"
+              >
+                 <LogOut className="w-3 h-3" />
+              </button>
+            </div>
           </div>
         ) : !isCollapsed && (
           <button 

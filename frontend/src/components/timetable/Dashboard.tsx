@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { LayoutDashboard, Zap, TrendingUp, Users, Clock, AlertTriangle, CheckCircle2, Scissors } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { getAnalyticsSummary, getAnalyticsLogs, getAnalyticsLoadDistribution, getAnalyticsFeed, generateSchedule } from '../../services/api.ts';
+import { useToast } from '../ui/Toast.tsx';
 
 const DATA = [
   { name: '08:00', cs: 12, phy: 8, math: 5 },
@@ -13,6 +15,36 @@ const DATA = [
 ];
 
 export const Dashboard: React.FC = () => {
+  const [summary, setSummary] = useState<any>(null);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loadData, setLoadData] = useState<any | null>(null);
+  const [feed, setFeed] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [running, setRunning] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [s, l, ld, f] = await Promise.all([getAnalyticsSummary(), getAnalyticsLogs(), getAnalyticsLoadDistribution(), getAnalyticsFeed()]);
+        if (!mounted) return;
+        setSummary(s || null);
+        setLogs(Array.isArray(l?.logs) ? l.logs : (l && l.logs ? l.logs : l?.logs || []));
+        setLoadData(ld || null);
+        setFeed(Array.isArray(f?.feed) ? f.feed : (f && f.feed ? f.feed : f?.feed || []));
+      } catch (e) {
+        console.warn('Dashboard: failed to load analytics', e);
+        try { toast.show('Failed to load analytics', 'error'); } catch(_){}
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
+
   return (
     <div className="flex-1 p-8 bg-slate-50 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
@@ -32,10 +64,10 @@ export const Dashboard: React.FC = () => {
         {/* Stats Grid */}
         <div className="grid grid-cols-4 gap-6 mb-8">
           {[
-            { label: 'System Efficiency', value: '91%', icon: Zap, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-            { label: 'Room Utilization', value: '82%', icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-50' },
-            { label: 'Faculty Sat.', value: '78%', icon: Users, color: 'text-purple-500', bg: 'bg-purple-50' },
-            { label: 'Batch Continuity', value: '94%', icon: Scissors, color: 'text-amber-500', bg: 'bg-amber-50' },
+            { label: 'System Efficiency', value: summary ? `${summary.systemEfficiency}%` : '—', icon: Zap, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+            { label: 'Room Utilization', value: summary ? `${summary.roomUtilization}%` : '—', icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-50' },
+            { label: 'Teacher Sat.', value: summary ? `${summary.facultySatisfaction}%` : '—', icon: Users, color: 'text-purple-500', bg: 'bg-purple-50' },
+            { label: 'Batch Continuity', value: summary ? `${summary.batchContinuity}%` : '—', icon: Scissors, color: 'text-amber-500', bg: 'bg-amber-50' },
           ].map((stat, i) => (
             <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition-transform hover:scale-[1.02]">
               <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:rotate-12", stat.bg)}>
@@ -63,9 +95,17 @@ export const Dashboard: React.FC = () => {
                  </div>
               </div>
             </div>
-            <div className="h-64">
+            <div className="h-64" style={{ minWidth: 0 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={DATA}>
+                <AreaChart data={
+                  // transform loadData into recharts-friendly shape
+                  (loadData && loadData.times && Array.isArray(loadData.series)) ?
+                    loadData.times.map((t: string, idx: number) => {
+                      const row: any = { name: t };
+                      loadData.series.forEach((s: any) => { row[s.department] = s.values[idx] || 0; });
+                      return row;
+                    }) : DATA
+                }>
                   <defs>
                     <linearGradient id="colorCs" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
@@ -79,8 +119,13 @@ export const Dashboard: React.FC = () => {
                     contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }}
                     itemStyle={{ fontWeight: 'bold' }}
                   />
-                  <Area type="monotone" dataKey="cs" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCs)" />
-                  <Area type="monotone" dataKey="phy" stroke="#3b82f6" strokeWidth={3} fill="transparent" />
+                  {/* Render first two departments as examples; fallback to known keys */}
+                  {loadData && loadData.series && loadData.series[0] && (
+                    <Area type="monotone" dataKey={loadData.series[0].department} stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCs)" />
+                  )}
+                  {loadData && loadData.series && loadData.series[1] && (
+                    <Area type="monotone" dataKey={loadData.series[1].department} stroke="#3b82f6" strokeWidth={3} fill="transparent" />
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -93,12 +138,7 @@ export const Dashboard: React.FC = () => {
               <span className="bg-rose-500 text-[8px] px-1.5 py-0.5 rounded ml-2 animate-pulse">Critical</span>
             </h3>
             <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
-              {[
-                { time: '08:12', msg: 'Faculty Conflict: Dr. Sarah in 2 Rooms', type: 'error' },
-                { time: '08:45', msg: 'System resolved 12 Room Gaps', type: 'success' },
-                { time: '09:01', msg: 'Tier 1 Priority: Room MB-101 requested', type: 'info' },
-                { time: '09:15', msg: 'Batch B2023-A: 2h Idle time detected', type: 'warning' },
-              ].map((log, i) => (
+              {(feed && feed.length > 0 ? feed : logs).map((log: any, i: number) => (
                 <div key={i} className="flex gap-4 group">
                   <span className="text-[9px] font-mono text-slate-500 pt-0.5">{log.time}</span>
                   <div>
@@ -130,7 +170,24 @@ export const Dashboard: React.FC = () => {
               <div className="relative z-10">
                  <h2 className="text-3xl font-black text-white tracking-tight mb-2">Automated Batch Compression</h2>
                  <p className="max-w-xs text-emerald-50 font-medium leading-relaxed mb-6">AI core found 8 sections with gaps over 90 minutes. Optimize batch continuity now?</p>
-                 <button className="bg-white text-emerald-600 px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-emerald-900/20">Execute Solver</button>
+                 <button onClick={async () => {
+                    if (running) return;
+                    setRunning(true);
+                    try {
+                      const res = await generateSchedule();
+                      if (res && res.task_id) {
+                        toast.show(`Solver enqueued: ${res.task_id}`, 'success');
+                      } else if (res && res.status) {
+                        toast.show(`Solver started: ${res.status}`, 'info');
+                      } else {
+                        toast.show('Solver request sent', 'info');
+                      }
+                    } catch (e: any) {
+                      toast.show(`Failed to run solver: ${e?.message || String(e)}`, 'error');
+                    } finally {
+                      setRunning(false);
+                    }
+                 }} className="bg-white text-emerald-600 px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-emerald-900/20">{running ? 'Running...' : 'Execute Solver'}</button>
               </div>
            </div>
 

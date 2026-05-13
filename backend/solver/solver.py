@@ -69,7 +69,7 @@ def _split_into_sessions(total_minutes: int, min_dur: int = 30, max_dur: int = 1
     return durations
 
 
-def solve_timetable(time_limit_seconds: int = 60, horizon: int = 12 * 60) -> bool:
+def solve_timetable(time_limit_seconds: int = 60, horizon: int = 12 * 60, constraints: dict | None = None) -> bool:
     """Solve and persist timetable entries.
 
     Returns True if a feasible/optimal solution was found and persisted,
@@ -218,9 +218,40 @@ def solve_timetable(time_limit_seconds: int = 60, horizon: int = 12 * 60) -> boo
             if len(intervals) > 1:
                 model.AddNoOverlap(intervals)
 
-        # Fixed lunch break(s) - prevent overlap with these intervals
-        # (minutes from 8:00). Default: 13:00 - 13:40 -> 300..340
+        # If constraints were not provided by the caller, try to load the
+        # latest persisted constraint set from the DB (admin-facing).
+        try:
+            if not constraints:
+                latest = models.TimetableConstraint.objects.first()
+                if latest:
+                    constraints = {
+                        'breakStart': latest.break_start.strftime('%H:%M') if latest.break_start else None,
+                        'breakEnd': latest.break_end.strftime('%H:%M') if latest.break_end else None,
+                        'maxDailyClasses': latest.max_daily_classes,
+                        'gapPenalty': latest.gap_penalty,
+                        'metadata': latest.metadata,
+                    }
+        except Exception:
+            pass
+
+        # Fixed break(s) - allow overriding via constraints (expects HH:MM strings)
+        # Default: 13:00 - 13:40 -> start=300 (minutes from 8:00), dur=40
         breaks = [(300, 40)]
+        try:
+            if constraints:
+                bs = constraints.get('breakStart') or constraints.get('break_start')
+                be = constraints.get('breakEnd') or constraints.get('break_end')
+                if bs and be and isinstance(bs, str) and isinstance(be, str):
+                    # parse HH:MM
+                    bsh, bsm = bs.split(':')
+                    beh, bem = be.split(':')
+                    bstart = int(bsh) * 60 + int(bsm) - 8 * 60
+                    bend = int(beh) * 60 + int(bem) - 8 * 60
+                    if bend > bstart:
+                        breaks = [(max(0, int(bstart)), int(bend - bstart))]
+        except Exception:
+            # keep defaults on parse errors
+            breaks = [(300, 40)]
         for s in sessions:
             sid = s['id']
             for bstart, bdur in breaks:
@@ -257,8 +288,20 @@ def solve_timetable(time_limit_seconds: int = 60, horizon: int = 12 * 60) -> boo
             span_vars.append(span)
 
         # Objective: minimize sum of spans (encourages compact schedules per batch)
+        # Allow scaling by a gap_penalty from constraints (default 1.0)
+        gap_penalty = 1.0
+        try:
+            if constraints:
+                gp = constraints.get('gapPenalty') or constraints.get('gap_penalty') or constraints.get('gap_penalty')
+                if gp is not None:
+                    gap_penalty = float(gp)
+        except Exception:
+            gap_penalty = 1.0
+
         if span_vars:
-            model.Minimize(sum(span_vars))
+            # cp-sat uses integers for objectives; scale the float penalty to int
+            weight = max(1, int(round(gap_penalty * 100)))
+            model.Minimize(weight * sum(span_vars))
 
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(time_limit_seconds)

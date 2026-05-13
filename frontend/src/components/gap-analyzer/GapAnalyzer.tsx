@@ -1,13 +1,44 @@
 import React from 'react';
-import { INITIAL_CLASSES, FACULTY } from '../../constants.ts';
+import { useData } from '../../context/DataContext.tsx';
 import { cn } from '../../lib/utils.ts';
 import { Clock, Scissors, Zap, AlertTriangle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { calculateGaps, timeToMinutes } from '../../services/timetableLogic.ts';
+import { getBatchDiagnostic } from '../../services/api.ts';
+import { useToast } from '../ui/Toast.tsx';
+import DropdownMenu from '../ui/DropdownMenu.tsx';
+import ConfirmDialog from '../ui/ConfirmDialog.tsx';
+import { Button } from '../ui/Button.tsx';
 
 export const GapAnalyzer: React.FC = () => {
-  const batchId = 'B2023-A';
-  const batchClasses = INITIAL_CLASSES.filter(c => c.batchId === batchId);
+  const data = useData();
+  const toast = useToast();
+  const availableBatches = Array.from(new Set((data?.initialClasses || []).map(c => c.batchId))).sort();
+  const [batchId, setBatchId] = React.useState<string | null>(availableBatches.length > 0 ? availableBatches[0] : null);
+  const [diagnostic, setDiagnostic] = React.useState<any | null>(null);
+  const [diagLoading, setDiagLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!batchId && availableBatches.length > 0) setBatchId(availableBatches[0]);
+  }, [availableBatches, batchId]);
+
+  const batchClasses = (data?.initialClasses || []).filter(c => c.batchId === batchId);
+
+  const runDiag = async (b?: string | null) => {
+    const bid = b ?? batchId;
+    if (!bid) return;
+    setDiagLoading(true);
+    try {
+      const res = await getBatchDiagnostic(bid);
+      setDiagnostic(res);
+      try { toast.show(`Diagnostic complete: ${res.continuity}% continuity`, 'success'); } catch (_) {}
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      toast.show(`Diagnostic failed: ${msg}`, 'error');
+    } finally {
+      setDiagLoading(false);
+    }
+  };
   const START_HOUR = 8;
   const END_HOUR = 18;
   const totalHours = END_HOUR - START_HOUR;
@@ -15,18 +46,39 @@ export const GapAnalyzer: React.FC = () => {
   const gaps = calculateGaps(batchClasses);
   const totalWasted = gaps.reduce((acc, g) => acc + g.duration, 0);
 
+  const formatTime = (mins?: number) => {
+    if (mins == null) return '';
+    const h = Math.floor(mins / 60).toString().padStart(2, '0');
+    const m = String(mins % 60).padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
   return (
     <div className="flex-1 p-8 bg-slate-50 overflow-y-auto">
       <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-8">
           <div>
             <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Student Diagnostic</span>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Gap Analyzer: {batchId}</h1>
+            {diagnostic && (
+              <div className="mt-2 text-sm text-slate-600">
+                Continuity: <strong className="text-emerald-700">{diagnostic.continuity}%</strong> • Sessions: <strong>{diagnostic.sessions}</strong> • Total Minutes: <strong>{diagnostic.total_minutes}</strong>
+              </div>
+            )}
           </div>
-          <button className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-900/10">
-            <Scissors className="w-4 h-4 text-emerald-400" />
-            Compress Schedule
-          </button>
+          <div className="flex items-center gap-3">
+            <DropdownMenu
+              trigger={<button className="bg-white border rounded px-3 py-2 text-sm">{batchId ?? 'Select Batch'}</button>}
+              items={availableBatches.map(b => ({ label: b, onSelect: () => { setBatchId(b); } }))}
+            />
+            <Button onClick={() => runDiag()} variant="default" size="md">{diagLoading ? 'Running...' : 'Run Diagnostic'}</Button>
+            <ConfirmDialog
+              trigger={<Button variant="outline" size="md" className="flex items-center gap-2"><Scissors className="w-4 h-4 text-emerald-400" />Compress Schedule</Button>}
+              title="Compress Schedule"
+              description="This will attempt to compress daily schedule gaps. Proceed?"
+              onConfirm={() => { try { toast.show('Compression applied (simulated)', 'success'); } catch(_){} }}
+            />
+          </div>
         </div>
 
         {/* Timeline Visualization */}
@@ -104,6 +156,23 @@ export const GapAnalyzer: React.FC = () => {
                </div>
             </div>
             
+            {diagnostic && diagnostic.gaps && diagnostic.gaps.length > 0 && (
+              <div className="bg-white p-4 border rounded mb-6">
+                <h3 className="font-bold mb-2">Detected Gaps</h3>
+                <ul className="space-y-2">
+                  {diagnostic.gaps.map((g: any, idx: number) => (
+                    <li key={idx} className="flex justify-between items-center">
+                      <div className="text-sm text-slate-700">{g.day} • {formatTime(g.start)} - {formatTime(g.end)} • <strong className="ml-2">{g.gapMinutes}m</strong></div>
+                      <div className="flex gap-2">
+                        <button onClick={() => toast.show(`Gap on ${g.day}: ${g.gapMinutes} minutes`, 'info')} className="text-xs px-2 py-1 rounded bg-slate-100">Details</button>
+                        <button onClick={() => runDiag()} className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">Re-run</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="mt-6 flex items-start gap-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
               <Zap className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
               <div>
@@ -141,7 +210,7 @@ export const GapAnalyzer: React.FC = () => {
 
           <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-900/10">
             <h3 className="text-sm font-black uppercase tracking-tight mb-4">Export Timetable</h3>
-            <p className="text-xs text-slate-400 mb-6 leading-relaxed">Generate a student-optimized PDF containing session summaries, faculty contact cards, and room directions.</p>
+            <p className="text-xs text-slate-400 mb-6 leading-relaxed">Generate a student-optimized PDF containing session summaries, teacher contact cards, and room directions.</p>
             <div className="grid grid-cols-2 gap-3">
               <button className="bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg text-[10px] font-bold uppercase transition-colors">Download PDF</button>
               <button className="bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg text-[10px] font-bold uppercase transition-colors">Sync iCal</button>

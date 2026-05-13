@@ -39,8 +39,9 @@ export const login = async (identifier: string, password: string): Promise<AuthR
   });
   const resp = userRes.data as any;
 
-  const role: UserRole = resp?.is_superuser || resp?.is_staff ? 'ADMIN' : resp?.faculty ? 'TEACHER' : 'STUDENT';
-  const name = resp?.faculty?.name || resp?.username || resp?.email || '';
+  const isTeacher = !!(resp?.teacher || resp?.faculty);
+  const role: UserRole = resp?.is_superuser || resp?.is_staff ? 'ADMIN' : isTeacher ? 'TEACHER' : 'STUDENT';
+  const name = resp?.teacher?.name || resp?.faculty?.name || resp?.username || resp?.email || '';
   const user: AuthUser = {
     id: resp?.username || resp?.email || '',
     name,

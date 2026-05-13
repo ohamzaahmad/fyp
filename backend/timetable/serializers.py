@@ -36,3 +36,34 @@ class ScheduleEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = models.ScheduleEntry
         fields = '__all__'
+
+
+class TimetableConstraintSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.TimetableConstraint
+        fields = ['id', 'break_start', 'break_end', 'max_daily_classes', 'gap_penalty', 'metadata', 'created_by', 'created_at']
+        read_only_fields = ['id', 'created_by', 'created_at']
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Department
+        fields = ['id', 'code', 'name', 'created_at']
+
+
+class RoomTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.RoomType
+        fields = ['id', 'code', 'name', 'created_at']
+
+
+class DepartmentModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Department
+        fields = ['id', 'code', 'name']
+
+
+class RoomTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.RoomType
+        fields = ['id', 'code', 'name']

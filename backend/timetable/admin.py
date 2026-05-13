@@ -30,3 +30,18 @@ class CourseLoadAdmin(admin.ModelAdmin):
 @admin.register(models.ScheduleEntry)
 class ScheduleEntryAdmin(admin.ModelAdmin):
     list_display = ('course_load', 'room', 'day_of_week', 'start_time', 'duration_minutes', 'is_locked')
+
+
+@admin.register(models.TimetableConstraint)
+class TimetableConstraintAdmin(admin.ModelAdmin):
+    list_display = ('id', 'break_start', 'break_end', 'max_daily_classes', 'gap_penalty', 'created_by', 'created_at')
+
+
+@admin.register(models.Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name')
+
+
+@admin.register(models.RoomType)
+class RoomTypeAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name')
