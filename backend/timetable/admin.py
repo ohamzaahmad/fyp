@@ -2,46 +2,46 @@ from django.contrib import admin
 from . import models
 
 
-@admin.register(models.Faculty)
-class FacultyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'department', 'tier', 'email')
-
-
-@admin.register(models.Building)
-class BuildingAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name')
-
-
-@admin.register(models.Floor)
-class FloorAdmin(admin.ModelAdmin):
-    list_display = ('building', 'number')
-
-
-@admin.register(models.Room)
-class RoomAdmin(admin.ModelAdmin):
-    list_display = ('full_name', 'capacity', 'room_type')
-
-
-@admin.register(models.CourseLoad)
-class CourseLoadAdmin(admin.ModelAdmin):
-    list_display = ('subject_code', 'subject_name', 'batch_id', 'faculty', 'weekly_hours')
-
-
-@admin.register(models.ScheduleEntry)
-class ScheduleEntryAdmin(admin.ModelAdmin):
-    list_display = ('course_load', 'room', 'day_of_week', 'start_time', 'duration_minutes', 'is_locked')
-
-
-@admin.register(models.TimetableConstraint)
-class TimetableConstraintAdmin(admin.ModelAdmin):
-    list_display = ('id', 'break_start', 'break_end', 'max_daily_classes', 'gap_penalty', 'created_by', 'created_at')
-
-
 @admin.register(models.Department)
 class DepartmentAdmin(admin.ModelAdmin):
     list_display = ('code', 'name')
 
 
-@admin.register(models.RoomType)
-class RoomTypeAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name')
+@admin.register(models.Floor)
+class FloorAdmin(admin.ModelAdmin):
+    list_display = ('department', 'number')
+
+
+@admin.register(models.Room)
+class RoomAdmin(admin.ModelAdmin):
+    list_display = ('name', 'floor', 'capacity', 'room_type')
+
+
+@admin.register(models.Course)
+class CourseAdmin(admin.ModelAdmin):
+    list_display = ('course_id', 'name', 'department')
+
+
+@admin.register(models.Batch)
+class BatchAdmin(admin.ModelAdmin):
+    list_display = ('name', 'department', 'semester', 'shift')
+
+
+@admin.register(models.Faculty)
+class FacultyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'department', 'tier', 'email')
+
+
+@admin.register(models.CourseAssignment)
+class CourseAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('course', 'batch', 'teacher', 'weekly_hours', 'type')
+
+
+@admin.register(models.ScheduleEntry)
+class ScheduleEntryAdmin(admin.ModelAdmin):
+    list_display = ('assignment', 'room', 'day_of_week', 'start_time', 'duration_minutes', 'is_locked')
+
+
+@admin.register(models.TimetableConstraint)
+class TimetableConstraintAdmin(admin.ModelAdmin):
+    list_display = ('id', 'break_start', 'break_end', 'max_daily_classes', 'gap_penalty', 'created_by', 'created_at')

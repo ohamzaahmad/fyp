@@ -10,16 +10,17 @@ import {
   ChevronRight,
   Zap,
   User,
-  LogOut
+  LogOut,
+  Eye,
+  EyeOff,
+  Map,
+  Sparkles
 } from 'lucide-react';
-import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { UserRole } from '../../services/authService.ts';
 import { MasterMap } from '../../types.ts';
-import { Map } from 'lucide-react';
-
-import { BuildingTree } from './BuildingTree.tsx';
+import { DepartmentTree } from './DepartmentTree.tsx';
 
 interface SidebarProps {
   currentView: string;
@@ -36,7 +37,7 @@ interface SidebarProps {
 const NAV_ITEMS: { id: string; label: string; icon: any; roles?: UserRole[] }[] = [
   { id: 'dashboard', label: 'Analytics Core', icon: LayoutDashboard, roles: ['ADMIN', 'TEACHER'] },
   { id: 'timetable', label: 'Master Map', icon: CalendarRange, roles: ['ADMIN', 'TEACHER'] },
-  { id: 'teachers', label: 'Teacher Registry', icon: Users, roles: ['ADMIN'] },
+  { id: 'teachers', label: 'AI Suggestions', icon: Sparkles, roles: ['ADMIN'] },
   { id: 'admin', label: 'Admin Console', icon: Users, roles: ['ADMIN'] },
   { id: 'mastermap-debug', label: 'Master Map (Debug)', icon: Map, roles: ['ADMIN', 'TEACHER'] },
   { id: 'teacher', label: 'Teacher Portal', icon: User, roles: ['TEACHER', 'ADMIN'] },
@@ -60,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { user, logout, isAuthenticated } = useAuth();
 
   const filteredNavItems = NAV_ITEMS.filter(item => {
-    if (!item.roles) return true; // Public items (Student View)
+    if (!item.roles) return true; 
     if (!isAuthenticated) return false;
     return item.roles.includes(user?.role || 'STUDENT');
   });
@@ -115,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
 
         {currentView === 'timetable' && user?.role === 'ADMIN' && (
-          <BuildingTree 
+          <DepartmentTree 
             isSidebarCollapsed={isCollapsed}
             collapsedBuildings={collapsedBuildings}
             onToggleBuilding={onToggleBuilding}

@@ -29,7 +29,7 @@ export const MobileTimeline: React.FC<MobileTimelineProps> = ({ classes }) => {
         ) : (
           sortedClasses.map((session, idx) => {
             const teacherId = session.teacherId || session.facultyId;
-            const teacher = data?.teachers.find((t: Teacher) => t.id === teacherId) || data?.faculty.find((f: any) => f.id === teacherId);
+            const teacher = data?.teachers.find(t => String(t.id) === String(teacherId)) || data?.faculty.find(f => String(f.id) === String(teacherId));
             
             return (
               <div 

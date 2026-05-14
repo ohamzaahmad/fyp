@@ -1,18 +1,36 @@
 import React from 'react';
-import { Sparkles, Users, FileBarChart, Check, Trash2, ArrowUpRight } from 'lucide-react';
-import { useData } from '../../context/DataContext.tsx';
+import { Sparkles, Users, FileBarChart, Check, Trash2, ArrowUpRight, AlertTriangle, Clock, CalendarX } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
+import { useToast } from '../ui/Toast.tsx';
 
 export const ControlRoom: React.FC = () => {
-  const { teachers = [] } = useData();
+  const toast = useToast();
+  
+  const handleApproveMerge = (id: number) => {
+    toast.show(`Merge recommendation #${id} approved! Timetable updated.`, 'success');
+  };
+
+  const handleResolveConflict = (id: number) => {
+    toast.show(`Conflict #${id} marked as resolved.`, 'success');
+  };
+
   return (
-    <div className="flex-1 p-8 bg-slate-50 flex gap-8">
+    <div className="flex-1 p-8 bg-slate-50 flex gap-8 overflow-y-auto">
       {/* Main Panel */}
       <div className="flex-1 space-y-8">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">AI Suggestions</h1>
+          <p className="text-slate-500 mt-1">Intelligent recommendations to optimize your master timetable.</p>
+        </div>
+
+        {/* Merge Recommender */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">Merge Recommender</h2>
+              <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <Users className="w-5 h-5 text-emerald-500" />
+                Merge Recommender
+              </h2>
               <p className="text-sm text-slate-500">AI-suggested session consolidations based on subject symmetry.</p>
             </div>
             <Sparkles className="w-5 h-5 text-emerald-500" />
@@ -20,30 +38,33 @@ export const ControlRoom: React.FC = () => {
 
           <div className="grid gap-4">
             {[
-              { id: 1, subject: 'CS101', teacher: 'Dr. Sarah Connor', sections: ['B2023-A', 'B2023-B'], efficiencyGain: '+15%' },
-              { id: 2, subject: 'MA303', teacher: 'Prof. Charles X.', sections: ['B2022-C', 'B2022-D'], efficiencyGain: '+22%' },
+              { id: 1, subject: 'CS-501 (Fundamental Sciences)', teacher: 'Dr. Sarah Connor', sections: ['B2023-A', 'B2023-B'], efficiencyGain: '+15%', status: 'pending' },
+              { id: 2, subject: 'MA-303 (Calculus)', teacher: 'Prof. Charles X.', sections: ['B2022-C', 'B2022-D'], efficiencyGain: '+22%', status: 'pending' },
             ].map((rec) => (
-              <div key={rec.id} className="bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
+              <div key={rec.id} className="bg-white border border-slate-200 p-6 rounded-2xl flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-4">
-                  <div className="bg-slate-100 p-2 rounded-lg">
-                    <Users className="w-5 h-5 text-slate-500" />
+                  <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                    <Sparkles className="w-6 h-6 text-emerald-500" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900">{rec.subject}</span>
-                      <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[10px] font-black uppercase">Merge Pot.</span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-black text-slate-900 text-lg">{rec.subject}</span>
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-black uppercase tracking-widest">Merge Potential</span>
                     </div>
-                    <p className="text-xs text-slate-500">{rec.teacher} • {rec.sections.join(' & ')}</p>
+                    <p className="text-sm text-slate-500 font-medium">{rec.teacher} • Can merge {rec.sections.join(' & ')}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-8">
                   <div className="text-right">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Impact</p>
-                    <p className="text-sm font-black text-emerald-600">{rec.efficiencyGain}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Space Efficiency Impact</p>
+                    <p className="text-xl font-black text-emerald-600">{rec.efficiencyGain}</p>
                   </div>
-                  <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-2">
+                  <button 
+                    onClick={() => handleApproveMerge(rec.id)}
+                    className="bg-slate-900 text-white px-6 py-3 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-2 shadow-lg shadow-slate-900/20"
+                  >
                     Approve Merge
-                    <Check className="w-3.5 h-3.5" />
+                    <Check className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -51,47 +72,57 @@ export const ControlRoom: React.FC = () => {
           </div>
         </section>
 
-        <section>
+        {/* Calendar Conflicts */}
+        <section className="pt-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">Teacher Priorities</h2>
+            <div>
+              <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <CalendarX className="w-5 h-5 text-rose-500" />
+                Calendar Conflicts
+              </h2>
+              <p className="text-sm text-slate-500">Detected scheduling overlaps or unsatisfied constraints.</p>
+            </div>
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-emerald-500" />
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Tier 1 Optimized</span>
+              <span className="w-3 h-3 rounded-full bg-rose-500 animate-pulse" />
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Attention Required</span>
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Teacher Name</th>
-                  <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dept</th>
-                  <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global Priority</th>
-                  <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Conflict Type</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Entities Involved</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Suggested Fix</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {(teachers || []).map((f) => (
-                  <tr key={f.id} className="group hover:bg-slate-50/50">
-                    <td className="px-6 py-3 font-bold text-slate-900 text-sm">{f.name}</td>
-                    <td className="px-6 py-3 text-xs text-slate-500">{f.department}</td>
-                    <td className="px-6 py-3">
-                      <div className="flex items-center gap-4">
-                        <input 
-                          type="range" min="1" max="10" defaultValue={10 - f.tier * 2} 
-                          className="w-32 h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                        />
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[10px] font-black uppercase",
-                          f.tier === 1 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                        )}>
-                          Tier {f.tier}
-                        </span>
+                {[
+                  { id: 1, type: 'Room Overlap', entities: 'Room 101 • CS-501 vs CS-502', suggestion: 'Move CS-502 to Room 102 (Available 10:00 AM)', severity: 'high' },
+                  { id: 2, type: 'Teacher Double Book', entities: 'Dr. Ahmad • Mon 08:00 AM', suggestion: 'Shift Physics lab to Tue 09:40 AM', severity: 'high' },
+                  { id: 3, type: 'Batch Gap', entities: 'SE-Batch-3 • Wed', suggestion: 'Compress gap by moving CS-506 to Wed 11:20 AM', severity: 'medium' },
+                ].map((conflict) => (
+                  <tr key={conflict.id} className="group hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className={cn("w-4 h-4", conflict.severity === 'high' ? "text-rose-500" : "text-amber-500")} />
+                        <span className="font-bold text-slate-900 text-sm">{conflict.type}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-3 text-right">
-                      <button className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors">
-                        <Trash2 className="w-4 h-4" />
+                    <td className="px-6 py-4 text-xs font-medium text-slate-600">{conflict.entities}</td>
+                    <td className="px-6 py-4">
+                      <span className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium border border-blue-100">
+                        {conflict.suggestion}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button 
+                        onClick={() => handleResolveConflict(conflict.id)}
+                        className="text-xs font-bold text-slate-600 hover:text-emerald-600 transition-colors border border-slate-200 hover:border-emerald-200 hover:bg-emerald-50 px-3 py-1.5 rounded-lg"
+                      >
+                        Apply Fix
                       </button>
                     </td>
                   </tr>
@@ -102,42 +133,39 @@ export const ControlRoom: React.FC = () => {
         </section>
       </div>
 
-      {/* Right Rail: Bulk Actions */}
+      {/* Right Rail: Contextual Helpers */}
       <div className="w-80 space-y-6">
         <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-900/10">
-          <h3 className="text-lg font-black tracking-tight mb-4 flex items-center gap-2">
-            <FileBarChart className="w-5 h-5 text-emerald-500" />
-            Bulk Import
+          <h3 className="text-lg font-black tracking-tight mb-2 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-emerald-500" />
+            System Status
           </h3>
-          <div className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center bg-slate-800/50 hover:bg-slate-800 transition-colors cursor-pointer group">
-            <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-              <ArrowUpRight className="w-6 h-6 text-emerald-400" />
-            </div>
-            <p className="text-sm font-bold text-slate-300">Drop CSV / Excel</p>
-            <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-widest font-black">Max 10MB</p>
-          </div>
+          <p className="text-[11px] text-slate-400 leading-relaxed mb-6">The AI constraint solver is actively monitoring the timetable for new optimizations.</p>
           
-          <div className="mt-8 space-y-4">
-            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Safety Checks</h4>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-400">
-                <span>Room Capacity Validation</span>
-                <Check className="w-4 h-4 text-emerald-500" />
+          <div className="space-y-4 border-t border-slate-800 pt-6">
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Active Monitors</h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />Room Capacity</span>
+                <span className="text-emerald-400">100% OK</span>
               </div>
-              <div className="flex items-center justify-between text-xs font-bold text-slate-400">
-                        <span>Teacher Overlap Check</span>
-                <Check className="w-4 h-4 text-emerald-500" />
+              <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />Teacher Overlaps</span>
+                <span className="text-rose-400">1 Conflict</span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />Batch Gaps</span>
+                <span className="text-amber-400">1 Warning</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
-          <h3 className="font-bold text-slate-900 mb-2">Export Summary</h3>
-          <p className="text-[11px] text-slate-500 leading-relaxed mb-4">Last optimized: Today, 02:45 PM. Next scheduled sync: 00:00 AM.</p>
-          <div className="h-24 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-center italic text-slate-300 text-xs text-center px-4">
-            Current system utilization is at 82% across all buildings.
-          </div>
+        <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl shadow-sm">
+          <h3 className="font-bold text-emerald-900 mb-2">Did you know?</h3>
+          <p className="text-[11px] text-emerald-700/80 leading-relaxed font-medium">
+            Approving merge suggestions automatically groups multiple sections into larger lecture halls, instantly freeing up smaller rooms and reducing overall teacher workload.
+          </p>
         </div>
       </div>
     </div>

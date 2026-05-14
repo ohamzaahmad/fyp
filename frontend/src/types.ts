@@ -1,28 +1,46 @@
-export type Department = 'Computer Science' | 'Physics' | 'Mathematics' | 'Arts' | 'Engineering';
-
-export interface Teacher {
-  id: string;
+export interface Department {
+  id: number;
+  code: string;
   name: string;
-  department: Department;
-  tier: 1 | 2 | 3;
-  requestedSlots: string[]; // e.g., ['08:00', '10:00']
+}
+
+export type Building = Department;
+
+export interface Course {
+  id: number;
+  course_id: string;
+  name: string;
+  department: number;
 }
 
 export interface Batch {
   id: number;
-  subject_code: string;
-  subject_name?: string;
-  batch_id: string;
-  // Prefer `teacher` but accept legacy `faculty` field for compatibility.
-  teacher?: number | null;
-  faculty?: number | null;
-  weekly_hours: number;
+  name: string;
+  department: number;
+  semester: number;
+  shift: 'M' | 'E';
+  courses: number[];
 }
 
-export interface Building {
-  id: string;
+export interface Teacher {
+  id: number;
   name: string;
-  floors: Floor[];
+  department: number;
+  tier: number;
+  email: string;
+  requested_slots: string[];
+  can_teach: number[];
+}
+
+export type Faculty = Teacher;
+
+export interface CourseAssignment {
+  id: number;
+  course: number;
+  batch: number;
+  teacher: number;
+  weekly_hours: number;
+  type: 'T' | 'P';
 }
 
 export interface Floor {
@@ -33,7 +51,7 @@ export interface Floor {
 
 export interface Room {
   id: string;
-  buildingId: string;
+  departmentId: string;
   floorId: string;
   name: string;
   capacity: number;
@@ -47,28 +65,19 @@ export interface ConflictDetail {
 }
 
 export interface ClassSession {
-  isConflict?: import("react/jsx-runtime").JSX.Element | null;
   id: string;
   subjectCode: string;
   subjectName?: string;
   batchId: string;
-  // Prefer `teacherId`; keep `facultyId` for backwards compatibility.
   teacherId?: string;
   facultyId?: string;
   roomId: string;
   startTime: string; // HH:mm
   durationMinutes: number;
   conflicts?: ConflictDetail[];
-  isMerged?: boolean;
   isLocked?: boolean;
-}
-
-export interface AppState {
-  view: 'dashboard' | 'timetable' | 'teachers' | 'rooms' | 'student' | 'settings' | 'export' | 'teacher' | 'mastermap-debug' | 'admin';
-  zoomLevel: number; // 0.5 to 2
-  selectedDepartments: Department[];
-  classes: ClassSession[];
-  masterMap?: MasterMap;
+  isMerged?: boolean;
+  isConflict?: boolean;
 }
 
 export interface RoomData {
@@ -84,16 +93,24 @@ export interface FloorData {
   rooms: { [roomId: string]: RoomData };
 }
 
-export interface BuildingData {
+export interface DepartmentData {
   id: string;
   name: string;
   floors: { [floorId: string]: FloorData };
 }
 
+export type BuildingData = DepartmentData;
+
 export interface MasterMap {
-  [buildingId: string]: BuildingData;
+  [deptId: string]: DepartmentData;
 }
 
-// Backwards compatibility: `Faculty` historically named in older UI
-// mappings. Keep a type alias so incremental renames don't break imports.
-export type Faculty = Teacher;
+export type NexusMasterMap = MasterMap;
+
+export interface AppState {
+  view: 'dashboard' | 'timetable' | 'teachers' | 'rooms' | 'student' | 'settings' | 'export' | 'teacher' | 'mastermap-debug' | 'admin';
+  zoomLevel: number;
+  selectedDepartments: number[];
+  classes: ClassSession[];
+  masterMap?: MasterMap;
+}

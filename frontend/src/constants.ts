@@ -1,13 +1,13 @@
-import { Building, Teacher, Department, ClassSession } from './types.ts';
+import { Building, Teacher, Department, ClassSession, Faculty } from './types.ts';
 
 const _RUNTIME = (globalThis as any).__NEXUS_DATA__ || {};
 
 export let DEPARTMENTS: Department[] = _RUNTIME.DEPARTMENTS || [
-  'Computer Science',
-  'Physics',
-  'Mathematics',
-  'Arts',
-  'Engineering',
+  { id: 1, code: 'CS', name: 'Computer Science' },
+  { id: 2, code: 'PHY', name: 'Physics' },
+  { id: 3, code: 'MATH', name: 'Mathematics' },
+  { id: 4, code: 'ARTS', name: 'Arts' },
+  { id: 5, code: 'ENG', name: 'Engineering' },
 ];
 
 export let BUILDINGS: Building[] = _RUNTIME.BUILDINGS || [
@@ -73,25 +73,25 @@ export let BUILDINGS: Building[] = _RUNTIME.BUILDINGS || [
 ];
 
 export let FACULTY: Teacher[] = _RUNTIME.FACULTY || [
-  { id: 'f1', name: 'Dr. Sarah Connor', department: 'Computer Science', tier: 1, requestedSlots: ['08:00', '09:00'] },
-  { id: 'f2', name: 'Prof. Albus D.', department: 'Physics', tier: 1, requestedSlots: ['14:00'] },
-  { id: 'f3', name: 'Dr. Jane Foster', department: 'Engineering', tier: 2, requestedSlots: [] },
-  { id: 'f4', name: 'Prof. Charles X.', department: 'Mathematics', tier: 1, requestedSlots: ['10:00'] },
-  { id: 'f5', name: 'Dr. Elias Thorne', department: 'Computer Science', tier: 1, requestedSlots: [] },
-  { id: 'f6', name: 'Prof. Sarah Miller', department: 'Mathematics', tier: 2, requestedSlots: [] },
+  { id: 1, name: 'Dr. Sarah Connor', department: 1, tier: 1, requested_slots: ['08:00', '09:00'], email: 'sarah@example.com', can_teach: [] },
+  { id: 2, name: 'Prof. Albus D.', department: 2, tier: 1, requested_slots: ['14:00'], email: 'albus@example.com', can_teach: [] },
+  { id: 3, name: 'Dr. Jane Foster', department: 5, tier: 2, requested_slots: [], email: 'jane@example.com', can_teach: [] },
+  { id: 4, name: 'Prof. Charles X.', department: 3, tier: 1, requested_slots: ['10:00'], email: 'charles@example.com', can_teach: [] },
+  { id: 5, name: 'Dr. Elias Thorne', department: 1, tier: 1, requested_slots: [], email: 'elias@example.com', can_teach: [] },
+  { id: 6, name: 'Prof. Sarah Miller', department: 3, tier: 2, requested_slots: [], email: 'miller@example.com', can_teach: [] },
 ];
 
 // Alias for clarity: prefer `TEACHERS` but keep `FACULTY` for runtime compatibility
 export let TEACHERS: Teacher[] = FACULTY;
 
 export let INITIAL_CLASSES: ClassSession[] = _RUNTIME.INITIAL_CLASSES || [
-  { id: 'c1', subjectCode: 'CS101', batchId: 'B2023-A', facultyId: 'f1', teacherId: 'f1', roomId: 'r101', startTime: '08:00', durationMinutes: 90, isLocked: true },
-  { id: 'c2', subjectCode: 'PH202', batchId: 'B2023-B', facultyId: 'f2', teacherId: 'f2', roomId: 'r102', startTime: '10:00', durationMinutes: 60 },
-  { id: 'c3', subjectCode: 'MA303', batchId: 'B2022-C', facultyId: 'f4', teacherId: 'f4', roomId: 'r201', startTime: '11:00', durationMinutes: 120 },
-  { id: 'c4', subjectCode: 'CS102', batchId: 'B2023-A', facultyId: 'f1', teacherId: 'f1', roomId: 'r103', startTime: '14:00', durationMinutes: 60 },
-  { id: 'c5', subjectCode: 'AR101', batchId: 'B2024-D', facultyId: 'f3', teacherId: 'f3', roomId: 'r101_b2', startTime: '09:00', durationMinutes: 90 },
-  { id: 'c6', subjectCode: 'CS301', batchId: 'B2021-E', facultyId: 'f5', teacherId: 'f5', roomId: 'r201', startTime: '08:30', durationMinutes: 90 },
-  { id: 'c7', subjectCode: 'MA101', batchId: 'B2024-F', facultyId: 'f6', teacherId: 'f6', roomId: 'r102_b2', startTime: '10:00', durationMinutes: 120 },
+  { id: 'c1', subjectCode: 'CS101', batchId: 'B2023-A', facultyId: '1', teacherId: '1', roomId: 'r101', startTime: '08:00', durationMinutes: 90, isLocked: true },
+  { id: 'c2', subjectCode: 'PH202', batchId: 'B2023-B', facultyId: '2', teacherId: '2', roomId: 'r102', startTime: '10:00', durationMinutes: 60 },
+  { id: 'c3', subjectCode: 'MA303', batchId: 'B2022-C', facultyId: '4', teacherId: '4', roomId: 'r201', startTime: '11:00', durationMinutes: 120 },
+  { id: 'c4', subjectCode: 'CS102', batchId: 'B2023-A', facultyId: '1', teacherId: '1', roomId: 'r103', startTime: '14:00', durationMinutes: 60 },
+  { id: 'c5', subjectCode: 'AR101', batchId: 'B2024-D', facultyId: '3', teacherId: '3', roomId: 'r101_b2', startTime: '09:00', durationMinutes: 90 },
+  { id: 'c6', subjectCode: 'CS301', batchId: 'B2021-E', facultyId: '5', teacherId: '5', roomId: 'r201', startTime: '08:30', durationMinutes: 90 },
+  { id: 'c7', subjectCode: 'MA101', batchId: 'B2024-F', facultyId: '6', teacherId: '6', roomId: 'r102_b2', startTime: '10:00', durationMinutes: 120 },
 ];
 
 export function setRuntimeData(data: Partial<{ DEPARTMENTS: Department[]; BUILDINGS: Building[]; FACULTY: Faculty[]; INITIAL_CLASSES: ClassSession[] }>) {

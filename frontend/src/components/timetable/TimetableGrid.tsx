@@ -1,12 +1,9 @@
-import React, { useMemo, useState } from 'react';
-import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-// Prefer using DataProvider/masterMap; no direct BUILDINGS fallback
-import { ClassSession, Room, MasterMap } from '../../types.ts';
+import React, { useMemo } from 'react';
+import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { ClassSession, MasterMap } from '../../types.ts';
 import { TimeSlotCard } from './TimeSlotCard.tsx';
 import { cn } from '../../lib/utils.ts';
-import { Building as BuildingIcon, Users, Maximize2, Minimize2, ChevronDown, ChevronRight, Lock } from 'lucide-react';
-import { timeToMinutes } from '../../services/timetableLogic.ts';
-import * as api from '../../services/api.ts';
+import { Building as BuildingIcon, Maximize2, Minimize2, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { useData } from '../../context/DataContext.tsx';
 
@@ -50,153 +47,60 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
     })
   );
 
-  const displayBuildings = useMemo(() => {
-    // Normalize data from DataProvider (preferred), then prop masterMap, then demo BUILDINGS
-    let baseMap = [] as any[];
-    if (data?.masterMap && Object.keys(data.masterMap).length > 0) {
-      baseMap = Object.values(data.masterMap).map((b: any) => ({
-        id: b.id,
-        name: b.name,
-        floors: Object.values(b.floors || {}).map((f: any) => ({
-          id: f.id,
-          number: f.number,
-          rooms: Object.values(f.rooms || {}).map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            capacity: r.capacity,
-            sessions: r.sessions || []
-          }))
-        }))
-      }));
-    } else if (data?.buildings && data.buildings.length > 0) {
-      baseMap = data.buildings.map((b: any) => ({
-        ...b,
-        floors: (b.floors || []).map((f: any) => ({
-          ...f,
-          rooms: (f.rooms || []).map((r: any) => ({
-            ...r,
-            sessions: classes.filter((s: any) => s.roomId === r.id)
-          }))
-        }))
-      }));
-    } else if (masterMap && Object.keys(masterMap).length > 0) {
-      baseMap = Object.values(masterMap).map((b: any) => ({
-        id: b.id,
-        name: b.name,
-        floors: Object.values(b.floors || {}).map((f: any) => ({
-          id: f.id,
-          number: f.number,
-          rooms: Object.values(f.rooms || {}).map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            capacity: r.capacity,
-            sessions: r.sessions || []
-          }))
-        }))
-      }));
-    } else {
-      baseMap = [];
-    }
-
-    // If teacher, only show buildings/rooms where they have a class
-    if (user?.role === 'TEACHER') {
-      return baseMap.map(b => ({
-        ...b,
-        floors: (b.floors || []).map((f: any) => ({
-          ...f,
-          rooms: (f.rooms || []).filter((r: any) => 
-            (r.sessions || []).some((s: any) => (s.teacherName || s.facultyName) === user.name)
-          ).map((r: any) => ({
-            ...r,
-            sessions: (r.sessions || []).filter((s: any) => (s.teacherName || s.facultyName) === user.name)
-          }))
-        })).filter((f: any) => (f.rooms || []).length > 0)
-      })).filter((b: any) => (b.floors || []).length > 0);
-    }
-
-    return baseMap;
-  }, [masterMap, classes, user, data]) as any[];
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, delta } = event;
-    const session = active.data.current as ClassSession;
-    if (!session || session.isLocked || user?.role === 'TEACHER') return;
-
-    const minutesMoved = Math.round(delta.x / pixelsPerMinute / 10) * 10;
-    const startMinutes = timeToMinutes(session.startTime);
-    const newStartMinutes = Math.max(START_HOUR * 60, Math.min(END_HOUR * 60 - session.durationMinutes, startMinutes + minutesMoved));
-
-    const h = Math.floor(newStartMinutes / 60);
-    const m = newStartMinutes % 60;
-    const newStartTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    
-    // Optimistically update local state
-    onClassesChange(classes.map(c => 
-      c.id === active.id ? { ...c, startTime: newStartTime } : c
-    ));
-
-    // Sync with backend
-    try {
-      await api.moveClass(session.id, newStartTime);
-    } catch (err) {
-      console.error('Failed to sync move with server:', err);
-    }
-  };
+  const displayDepartments = useMemo(() => {
+    const mm = data?.masterMap || masterMap || {};
+    return Object.values(mm).map(d => ({
+      id: d.id,
+      name: d.name,
+      floors: Object.values(d.floors || {}).map(f => ({
+        id: f.id,
+        number: f.number,
+        rooms: Object.values(f.rooms || {})
+      }))
+    }));
+  }, [masterMap, data?.masterMap]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white relative">
       <div className="flex-1 overflow-auto no-scrollbar scroll-smooth" id="grid-container">
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors}>
           <div className="min-w-max flex flex-col" style={{ width: `calc(${totalWidth}px + 140px)` }}>
             
-            {/* Timeline Header (Sticky Top) */}
             <div className="sticky top-0 z-30 flex bg-white border-b border-slate-200">
               <div className="w-[140px] h-10 bg-slate-50 border-r border-slate-200 flex items-center justify-center sticky left-0 z-40">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Room / Time</span>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Dept / Room</span>
               </div>
               <div className="flex-1 flex divide-x divide-slate-100">
                 {HOURS.map((hour) => (
                    <div key={hour} style={{ width: `${hourWidth}px` }} className="relative">
-                      <div className={cn(
-                        "text-center py-2.5 text-[9px] font-black text-slate-500 uppercase tracking-widest",
-                        hour === 13 ? "bg-rose-50/50 text-rose-900 border-x border-rose-100/50" : ""
-                      )}>
+                      <div className="text-center py-2.5 text-[9px] font-black text-slate-500 uppercase tracking-widest">
                         {hour.toString().padStart(2, '0')}:00
                       </div>
-                      {hour === 13 && (
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                           <span className="text-[7px] font-black text-rose-300 uppercase tracking-[0.3em] rotate-90">Break</span>
-                        </div>
-                      )}
                    </div>
                 ))}
               </div>
             </div>
 
-            {/* Grid Body */}
             <div className="flex-1 flex flex-col">
-                {displayBuildings.map((building: any) => {
-                const isCollapsed = collapsedBuildings.has(building.id);
-                const buildingFloors = Object.values(building.floors || {}) as any[];
+                {displayDepartments.map((dept: any) => {
+                const isCollapsed = collapsedBuildings.has(dept.id);
+                const deptFloors = dept.floors || [];
                 
                 return (
-                  <div key={building.id} className="flex flex-col">
-                    {/* Building Header */}
+                  <div key={dept.id} className="flex flex-col">
                     <div 
-                      onClick={() => onToggleBuilding(building.id)}
+                      onClick={() => onToggleBuilding(dept.id)}
                       className="h-8 bg-slate-100 flex items-center px-4 border-b border-slate-200 sticky left-0 z-20 cursor-pointer group/header"
                     >
                       <div className="flex items-center gap-2">
                         {isCollapsed ? <ChevronRight className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
                         <BuildingIcon className="w-3 h-3 text-emerald-500" />
-                        <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">{building.name}</span>
-                        <div className="h-3 w-[1px] bg-slate-300 mx-1" />
-                        <span className="text-[9px] font-bold text-slate-400">{(buildingFloors || []).length} Floors</span>
+                        <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">{dept.name}</span>
                       </div>
                     </div>
  
-                    {!isCollapsed && buildingFloors.map((floor: any) => {
-                      const floorRooms = Object.values(floor.rooms || {}) as any[];
+                    {!isCollapsed && deptFloors.map((floor: any) => {
+                      const floorRooms = floor.rooms || [];
                       return (
                         <React.Fragment key={floor.id}>
                           <div className="h-6 bg-slate-50/50 flex items-center px-8 border-b border-slate-200/50 sticky left-0 z-20">
@@ -208,42 +112,19 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                             
                             return (
                               <div key={room.id} className="flex border-b border-slate-100 h-16 group hover:bg-slate-50/30 transition-colors">
-                                {/* Room Metadata Column (Sticky Left) */}
                                 <div className="w-[140px] px-4 border-r border-slate-200 bg-white sticky left-0 z-10 flex flex-col justify-center transition-colors group-hover:bg-slate-50">
                                   <span className="text-xs font-black text-slate-900 tracking-tighter">{room.name}</span>
                                   <span className="text-[9px] text-slate-400 uppercase font-bold tracking-tight">Cap: {room.capacity}</span>
                                 </div>
  
-                                {/* Timeline Interaction Grid */}
                                 <div className="flex-1 relative bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px)] bg-[size:10%_100%]">
-                                  {/* Vertical Hour Grids */}
-                                  <div className="absolute inset-0 flex divide-x divide-slate-100/50 pointer-events-none">
-                                     {HOURS.map(h => (
-                                       <div key={h} className="flex-1 h-full flex divide-x divide-slate-50/30" style={{ width: `${hourWidth}px` }}>
-                                          <div className="flex-1" />
-                                          <div className="flex-1" />
-                                       </div>
-                                     ))}
-                                  </div>
- 
-                                  {/* Lunch Break shading */}
-                                  <div 
-                                    className="absolute top-0 bottom-0 bg-rose-50/20 mix-blend-multiply border-x border-rose-100/30"
-                                    style={{ 
-                                      left: `${(13 - START_HOUR) * hourWidth}px`, 
-                                      width: `${hourWidth}px` 
-                                    }}
-                                  />
- 
-                                  {/* Placed Sessions */}
-                                  {roomSessions.map(session => {
+                                  {roomSessions.map((session: any) => {
                                     const [h, m] = session.startTime.split(':').map(Number);
                                     const leftOffset = ((h - START_HOUR) * 60 + m) * pixelsPerMinute;
- 
                                     return (
                                       <div 
                                         key={session.id}
-                                        className={cn("absolute inset-y-0", session.isLocked && "z-10")}
+                                        className="absolute inset-y-0"
                                         style={{ left: `${leftOffset}px` }}
                                       >
                                         <TimeSlotCard 
@@ -270,7 +151,6 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
         </DndContext>
       </div>
 
-      {/* Grid Controls (Bottom Floating) */}
       <div className="absolute bottom-12 right-8 flex items-center gap-3 bg-white border border-slate-300 px-4 py-2 rounded shadow-2xl z-40 transition-transform hover:scale-105">
         <button 
           onClick={() => onZoomChange(Math.max(0.5, zoomLevel - 0.1))}

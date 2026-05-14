@@ -2,47 +2,21 @@ import { useState, useCallback, useMemo } from 'react';
 import { 
   ClassSession, 
   MasterMap, 
-  BuildingData, 
+  DepartmentData, 
   FloorData, 
   RoomData,
-  Building,
-  Room
+  Department
 } from '../types.ts';
 import * as api from '../services/api.ts';
 
 /**
  * Custom Hook for University-Grade Timetable State Management
- * Handles complex nesting (Building > Floor > Room) efficient ingestion
+ * Handles complex nesting (Department > Floor > Room) efficient ingestion
  */
 export function useNexusTimetable(initialClasses: ClassSession[]) {
   const [masterMap, setMasterMap] = useState<MasterMap>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Helper to transform flat array into nested structure (for legacy/demo support)
-  const transformToMap = useCallback((sessions: ClassSession[], buildings: Building[]): MasterMap => {
-    const map: MasterMap = {};
-
-    buildings.forEach(b => {
-      const bData: BuildingData = { id: b.id, name: b.name, floors: {} };
-      b.floors.forEach(f => {
-        const fData: FloorData = { id: f.id, number: f.number, rooms: {} };
-        f.rooms.forEach(r => {
-          const rData: RoomData = {
-            id: r.id,
-            name: r.name,
-            capacity: r.capacity,
-            sessions: sessions.filter(s => s.roomId === r.id)
-          };
-          fData.rooms[r.id] = rData;
-        });
-        bData.floors[f.id] = fData;
-      });
-      map[b.id] = bData;
-    });
-
-    return map;
-  }, []);
 
   const refreshMap = useCallback(async () => {
     setIsLoading(true);
@@ -51,8 +25,8 @@ export function useNexusTimetable(initialClasses: ClassSession[]) {
       const data = await api.getMasterTimetable();
       setMasterMap(data);
     } catch (err) {
-      setError('Backend high-density map unavailable. Synchronizing via local transform.');
-      console.warn('Falling back to client-side relational mapping.');
+      setError('Backend high-density map unavailable.');
+      console.warn('Backend sync failed.');
     } finally {
       setIsLoading(false);
     }
@@ -61,8 +35,8 @@ export function useNexusTimetable(initialClasses: ClassSession[]) {
   // Compute a flat list of all sessions for global searches or filtering
   const allSessions = useMemo(() => {
     const sessions: ClassSession[] = [];
-    Object.values(masterMap || {}).forEach(b => {
-      Object.values(b.floors || {}).forEach(f => {
+    Object.values(masterMap || {}).forEach(d => {
+      Object.values(d.floors || {}).forEach(f => {
         Object.values(f.rooms || {}).forEach(r => {
           sessions.push(...(r.sessions || []));
         });
@@ -71,13 +45,19 @@ export function useNexusTimetable(initialClasses: ClassSession[]) {
     return sessions;
   }, [masterMap]);
 
+  const transformToMap = useCallback((sessions: ClassSession[]) => {
+    // This is a complex transformation that usually happens on the backend
+    // For now we refresh the map to get the latest structure
+    refreshMap();
+  }, [refreshMap]);
+
   return { 
     masterMap, 
     setMasterMap, 
     isLoading, 
     error, 
     refreshMap, 
-    transformToMap,
-    allSessions 
+    allSessions,
+    transformToMap
   };
 }

@@ -8,3 +8,5 @@ celery>=5.3
 redis>=4.3
 weasyprint>=57.0
 python-dotenv>=1.0
+whitenoise>=6.5
+gunicorn>=21.2

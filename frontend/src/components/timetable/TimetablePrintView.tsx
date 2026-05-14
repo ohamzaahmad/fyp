@@ -15,16 +15,8 @@ const TIME_SLOTS = [
 
 export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes }) => {
   const data = useData();
-  // Flatten rooms for print grid
-  const buildingsSource = data?.buildings || [];
-  const allRooms: any[] = [];
-  buildingsSource.forEach(b => {
-    (b.floors || []).forEach(f => {
-      (f.rooms || []).forEach(r => {
-        allRooms.push({ ...r, buildingName: b.name, floorNum: f.number });
-      });
-    });
-  });
+  const buildingsSource = data?.masterMap || {};
+  const buildings = Object.values(buildingsSource);
 
   return (
     <div className="bg-white p-8 font-sans print:p-0 print:m-0" id="uaf-print-body">
@@ -36,61 +28,76 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
         }
       `}} />
 
-      <div className="text-center mb-6 border-2 border-black p-4">
-        <h1 className="text-2xl font-bold uppercase">Time Table of Spring Semester 2026, Department of Computer Science, UAF</h1>
-      </div>
+      {buildings.map((building, bIdx) => {
+        const rooms: any[] = [];
+        Object.values(building.floors || {}).forEach(f => {
+          Object.values(f.rooms || {}).forEach(r => {
+            rooms.push({ ...r, buildingName: building.name, floorNum: f.number });
+          });
+        });
 
-      <table className="w-full border-collapse border-2 border-black text-[10px]">
-        <thead>
-          <tr className="bg-slate-100">
-            <th className="border border-black p-1 w-12">Day</th>
-            <th className="border border-black p-1 w-24">Class Room</th>
-            {TIME_SLOTS.map(slot => (
-              <th key={slot} className={cn("border border-black p-1", slot === 'Break' && "bg-slate-200")}>
-                {slot}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {allRooms.map((room, idx) => (
-            <tr key={idx} className="h-16">
-              {idx === 0 && <td rowSpan={allRooms.length} className="border border-black text-center font-bold rotate-180 [writing-mode:vertical-lr]">Mon</td>}
-              <td className="border border-black p-1 font-bold text-center bg-slate-50">
-                <div className="text-[8px] uppercase">{room.buildingName}</div>
-                <div className="text-[10px] leading-tight mt-1">{room.name}</div>
-              </td>
-              {TIME_SLOTS.map((slot, sIdx) => {
-                if (slot === 'Break') return <td key={sIdx} className="border border-black bg-slate-100 text-center font-black animate-pulse">BREAK</td>;
+        if (rooms.length === 0) return null;
 
-                const startHour = slot.split(':')[0];
-                const session = classes.find(c => c.roomId === room.id && c.startTime.startsWith(startHour.padStart(2, '0')));
-                const teacher = session ? data?.teachers.find((t: Teacher) => t.id === (session.teacherId || session.facultyId)) : null;
+        return (
+          <div key={bIdx} style={{ pageBreakAfter: 'always' }} className="mb-12 print:mb-0 print:block">
+            <div className="text-center mb-6 border-2 border-black p-4">
+              <h1 className="text-2xl font-bold uppercase">Time Table of Spring Semester 2026, Department of {building.name}, UAF</h1>
+            </div>
 
-                return (
-                  <td key={sIdx} className="border border-black p-1 text-center relative">
-                    {session ? (
-                      <div className="flex flex-col justify-center h-full">
-                        <div className="font-bold">{session.subjectCode}</div>
-                        <div className="text-[8px]">{session.batchId}</div>
-                        <div className="text-[8px] italic">{teacher?.name}</div>
-                      </div>
-                    ) : (
-                      <div className="text-slate-200">-</div>
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            <table className="w-full border-collapse border-2 border-black text-[10px]">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-black p-1 w-12">Day</th>
+                  <th className="border border-black p-1 w-24">Class Room</th>
+                  {TIME_SLOTS.map(slot => (
+                    <th key={slot} className={cn("border border-black p-1", slot === 'Break' && "bg-slate-200")}>
+                      {slot}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rooms.map((room, idx) => (
+                  <tr key={idx} className="h-16">
+                    {idx === 0 && <td rowSpan={rooms.length} className="border border-black text-center font-bold rotate-180 [writing-mode:vertical-lr]">Mon</td>}
+                    <td className="border border-black p-1 font-bold text-center bg-slate-50">
+                      <div className="text-[8px] uppercase">{room.buildingName}</div>
+                      <div className="text-[10px] leading-tight mt-1">{room.name}</div>
+                    </td>
+                    {TIME_SLOTS.map((slot, sIdx) => {
+                      if (slot === 'Break') return <td key={sIdx} className="border border-black bg-slate-100 text-center font-black animate-pulse">BREAK</td>;
 
-      <div className="mt-8 flex justify-between text-[10px] font-bold">
-        <span>Generated by NexusTime AI</span>
-        <span>Authentication ID: PROD_UAF_S26</span>
-        <div className="border-t border-black px-12 pt-1">Administrative Authority Signature</div>
-      </div>
+                      const startHour = slot.split(':')[0];
+                      const session = classes.find(c => c.roomId === room.id && c.startTime.startsWith(startHour.padStart(2, '0')));
+                      const teacher = session ? data?.teachers.find((t: Teacher) => String(t.id) === String(session.teacherId || session.facultyId)) : null;
+
+                      return (
+                        <td key={sIdx} className="border border-black p-1 text-center relative">
+                          {session ? (
+                            <div className="flex flex-col justify-center h-full">
+                              <div className="font-bold">{session.subjectCode}</div>
+                              <div className="text-[8px]">{session.batchId}</div>
+                              <div className="text-[8px] italic">{teacher?.name}</div>
+                            </div>
+                          ) : (
+                            <div className="text-slate-200">-</div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="mt-8 flex justify-between text-[10px] font-bold">
+              <span>Generated by NexusTime AI</span>
+              <span>Authentication ID: PROD_UAF_S26</span>
+              <div className="border-t border-black px-12 pt-1">Administrative Authority Signature</div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };

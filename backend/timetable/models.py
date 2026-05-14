@@ -1,71 +1,9 @@
-from django.conf import settings
+import uuid
 from django.db import models
-
-
-class DepartmentChoices(models.TextChoices):
-    CS = 'CS', 'Computer Science'
-    PHYSICS = 'PH', 'Physics'
-    MATH = 'MATH', 'Mathematics'
-    ARTS = 'ARTS', 'Arts'
-    ENGINEERING = 'ENG', 'Engineering'
-
-
-class Faculty(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    name = models.CharField(max_length=255)
-    department = models.CharField(max_length=50, choices=DepartmentChoices.choices)
-    tier = models.IntegerField(default=3)
-    email = models.EmailField(unique=True)
-    requested_slots = models.JSONField(default=list, blank=True)
-
-    def __str__(self):
-        return self.name
-    
-    class Meta:
-        # Database previously used `teacher` table name in some migration
-        # histories; map the current `Faculty` model to that existing
-        # table to remain compatible with the sqlite DB state.
-        db_table = 'timetable_teacher'
-
-
-class Building(models.Model):
-    name = models.CharField(max_length=100)
-    code = models.CharField(max_length=10, unique=True)
-
-    def __str__(self):
-        return f"{self.code} - {self.name}"
-
-
-class Floor(models.Model):
-    building = models.ForeignKey(Building, on_delete=models.CASCADE, related_name='floors')
-    number = models.IntegerField()
-
-    def __str__(self):
-        return f"{self.building.code} - Floor {self.number}"
-
-
-class Room(models.Model):
-    ROOM_TYPES = [('Lec', 'Lecture'), ('Lab', 'Laboratory')]
-
-    floor = models.ForeignKey(Floor, on_delete=models.CASCADE, related_name='rooms')
-    name = models.CharField(max_length=50)
-    capacity = models.IntegerField()
-    room_type = models.CharField(max_length=10, choices=ROOM_TYPES, default='Lec')
-
-    @property
-    def full_name(self):
-        return f"{self.floor.building.name} - {self.name}"
-
-    def __str__(self):
-        return f"{self.full_name} ({self.capacity})"
+from django.conf import settings
 
 
 class Department(models.Model):
-    """Persisted departments to allow CRUD from admin and API.
-
-    We keep `DepartmentChoices` for existing code using choice values; the
-    `Department` model stores persistent department rows (code, name).
-    """
     code = models.CharField(max_length=10, unique=True)
     name = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -74,34 +12,76 @@ class Department(models.Model):
         return f"{self.name} ({self.code})"
 
 
-class RoomType(models.Model):
-    """Optional persisted room types. Existing `Room.ROOM_TYPES` values are
-    used as a fallback when no DB types exist.
-    """
-    code = models.CharField(max_length=10, unique=True)
-    name = models.CharField(max_length=100)
-    created_at = models.DateTimeField(auto_now_add=True)
+class Floor(models.Model):
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='floors')
+    number = models.IntegerField()
+
+    def __str__(self):
+        return f"{self.department.code} - Floor {self.number}"
+
+
+class Room(models.Model):
+    ROOM_TYPES = [('Lec', 'Lecture'), ('Lab', 'Laboratory')]
+    floor = models.ForeignKey(Floor, on_delete=models.CASCADE, related_name='rooms')
+    name = models.CharField(max_length=50)
+    capacity = models.IntegerField()
+    room_type = models.CharField(max_length=10, choices=ROOM_TYPES, default='Lec')
+
+    @property
+    def full_name(self):
+        return f"{self.floor.department.name} - {self.name}"
+
+    def __str__(self):
+        return f"{self.full_name} ({self.capacity})"
+
+
+class Course(models.Model):
+    course_id = models.CharField(max_length=20, unique=True)  # e.g., CS-501
+    name = models.CharField(max_length=255)
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='courses')
+
+    def __str__(self):
+        return f"{self.course_id} - {self.name}"
+
+
+class Batch(models.Model):
+    SHIFT_CHOICES = [('M', 'Morning'), ('E', 'Evening')]
+    name = models.CharField(max_length=100)  # e.g., BSSE-2023-A
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='batches')
+    semester = models.IntegerField(default=1)
+    shift = models.CharField(max_length=1, choices=SHIFT_CHOICES, default='M')
+    courses = models.ManyToManyField(Course, related_name='batches')
+
+    def __str__(self):
+        return f"{self.name} (Sem {self.semester}) [{self.shift}]"
+
+
+class Faculty(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    name = models.CharField(max_length=255)
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='faculty')
+    tier = models.IntegerField(default=3)
+    email = models.EmailField(unique=True)
+    requested_slots = models.JSONField(default=list, blank=True)
+    can_teach = models.ManyToManyField(Course, related_name='teachers')
 
     def __str__(self):
         return self.name
 
+    class Meta:
+        db_table = 'timetable_teacher'
 
-class CourseLoad(models.Model):
-    subject_code = models.CharField(max_length=20)
-    subject_name = models.CharField(max_length=255)
-    batch_id = models.CharField(max_length=50)
-    faculty = models.ForeignKey(Faculty, on_delete=models.CASCADE, related_name='course_loads')
+
+class CourseAssignment(models.Model):
+    TYPE_CHOICES = [('T', 'Theory'), ('P', 'Practical')]
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='assignments')
+    batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name='assignments')
+    teacher = models.ForeignKey(Faculty, on_delete=models.CASCADE, related_name='assignments')
     weekly_hours = models.IntegerField(default=3)
+    type = models.CharField(max_length=1, choices=TYPE_CHOICES, default='T')
 
     def __str__(self):
-        return f"{self.subject_code} - {self.subject_name} [{self.batch_id}]"
-
-    class Meta:
-        # Older migrations renamed CourseLoad -> Batch producing
-        # `timetable_batch` table. Use this db_table to remain
-        # compatible with the current database without running
-        # destructive migrations.
-        db_table = 'timetable_batch'
+        return f"{self.course.course_id} for {self.batch.name} by {self.teacher.name}"
 
 
 class ScheduleEntry(models.Model):
@@ -115,7 +95,7 @@ class ScheduleEntry(models.Model):
         ('Sun', 'Sunday'),
     ]
 
-    course_load = models.ForeignKey(CourseLoad, on_delete=models.CASCADE, related_name='entries')
+    assignment = models.ForeignKey(CourseAssignment, on_delete=models.CASCADE, related_name='entries')
     room = models.ForeignKey(Room, on_delete=models.SET_NULL, null=True, related_name='entries')
     day_of_week = models.CharField(max_length=3, choices=DAY_CHOICES)
     start_time = models.TimeField()
@@ -126,14 +106,10 @@ class ScheduleEntry(models.Model):
         unique_together = ['room', 'day_of_week', 'start_time']
 
     def __str__(self):
-        return f"{self.course_load} @ {self.room} on {self.day_of_week} {self.start_time}"
+        return f"{self.assignment} @ {self.room} on {self.day_of_week} {self.start_time}"
 
 
 class TimetableConstraint(models.Model):
-    """Persisted runtime solver constraints. The frontend may POST these
-    to store operator-approved overrides that the solver will read when
-    generating timetables.
-    """
     break_start = models.TimeField(null=True, blank=True, help_text='Local time when a fixed break starts (HH:MM)')
     break_end = models.TimeField(null=True, blank=True, help_text='Local time when a fixed break ends (HH:MM)')
     max_daily_classes = models.IntegerField(null=True, blank=True, help_text='Soft limit for classes per batch per day')

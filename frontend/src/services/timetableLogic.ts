@@ -52,7 +52,7 @@ export const checkConflicts = (
 
       // Teacher Pool Check
       if (target.teacherId === other.teacherId || target.facultyId === other.facultyId) {
-        const teacher = teacherPool.find(f => f.id === (target.teacherId || target.facultyId));
+        const teacher = teacherPool.find(f => String(f.id) === String(target.teacherId || target.facultyId));
         conflicts.push({
           type: 'Teacher',
           severity: 'Critical',

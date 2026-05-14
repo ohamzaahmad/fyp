@@ -30,7 +30,7 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
   });
 
   const teacherId = session.teacherId || session.facultyId;
-  const teacher = data?.teachers.find((t: Teacher) => t.id === teacherId) || data?.faculty.find((f: any) => f.id === teacherId);
+  const teacher = data?.teachers.find(t => String(t.id) === String(teacherId)) || data?.faculty.find(f => String(f.id) === String(teacherId));
   const width = session.durationMinutes * pixelsPerMinute;
   
   const style = {

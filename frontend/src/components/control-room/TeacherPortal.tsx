@@ -31,6 +31,7 @@ export const TeacherPortal: React.FC = () => {
           const m = selectedTeacherId.match(/(\d+)/);
           if (m) pk = parseInt(m[1], 10);
         }
+        if (pk === undefined) return;
         const data = await getTeacherSchedule(pk);
         if (!mounted) return;
         setFetchedSessions((data && data.entries) ? data.entries.map((e: any) => ({

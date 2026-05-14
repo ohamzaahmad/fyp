@@ -43,7 +43,7 @@ function AppContent() {
   const [state, setState] = useState<AppState>({
     view: 'dashboard',
     zoomLevel: 1.0,
-    selectedDepartments: ['Computer Science'],
+    selectedDepartments: [],
     classes: [],
   });
 
@@ -209,7 +209,7 @@ function AppContent() {
             {isHeaderVisible && (
               <Header 
                 selectedDepts={state.selectedDepartments}
-                setSelectedDepts={(depts) => setState(prev => ({ ...prev, selectedDepartments: depts as Department[] }))}
+                setSelectedDepts={(depts) => setState(prev => ({ ...prev, selectedDepartments: depts as number[] }))}
                 efficiency={87}
               />
             )}
@@ -226,7 +226,7 @@ function AppContent() {
         <div className="flex-1 flex flex-col relative overflow-hidden">
 
           {/* View Content */}
-          <div className="flex-1 overflow-hidden flex flex-col">
+          <div className={`flex-1 flex flex-col ${state.view === 'timetable' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
             {isMobile ? (
               <MobileTimeline classes={state.classes} />
             ) : (
