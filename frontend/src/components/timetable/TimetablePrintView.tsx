@@ -1,47 +1,74 @@
 import React from 'react';
-import { ClassSession, Teacher } from '../../types.ts';
 import { useData } from '../../context/DataContext.tsx';
 import { cn } from '../../lib/utils.ts';
+import { TIME_SLOTS } from '../../constants.ts';
+import { ClassSession, Teacher } from '../../types.ts';
 
 interface TimetablePrintViewProps {
   classes: ClassSession[];
 }
 
-const TIME_SLOTS = [
-  '8:00 - 8:50', '8:50 - 9:40', '9:40 - 10:30', '10:30 - 11:20', '11:20 - 12:10', '12:10 - 1:00',
-  'Break',
-  '1:10 - 2:00', '2:00 - 2:50', '2:50 - 3:40', '3:40 - 4:30', '4:30 - 5:20', '5:20 - 6:10'
-];
+const parseTime = (timeStr: string) => {
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
+};
+
+const getSlotRanges = () => {
+  // Convert TIME_SLOTS to start/end minutes for alignment
+  return TIME_SLOTS.map(slot => {
+    if (slot === 'Break') return null; // Handle break specially or skip
+    const parts = slot.split('-');
+    if (parts.length !== 2) return null;
+    
+    const parse = (t: string) => {
+      const [hStr, mStr] = t.trim().split(':');
+      let h = parseInt(hStr);
+      const m = parseInt(mStr || '0');
+      // If it's 1-7, assume PM (add 12)
+      if (h >= 1 && h <= 7) h += 12;
+      return h * 60 + m;
+    };
+    
+    return { start: parse(parts[0]), end: parse(parts[1]), label: slot };
+  });
+};
+
+
 
 export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes }) => {
   const data = useData();
+  const DAYS = data?.systemSettings?.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
   React.useEffect(() => {
     if (!data?.masterMap || Object.keys(data.masterMap).length === 0) {
       data.refreshMasterMap?.();
     }
   }, [data.masterMap, data.refreshMasterMap]);
-  const sessions = data?.sessions || [];
+
   const buildingsSource = data?.masterMap || {};
   const buildings = Object.values(buildingsSource);
+  const slotRanges = React.useMemo(() => getSlotRanges(), []);
 
-  // Precompute slot start/end in minutes (24-hour). We treat slots before the 'Break' as morning/noon
-  // and slots after as afternoon (add 12 to hour when hour < 12).
-  const BREAK_INDEX = TIME_SLOTS.indexOf('Break');
-  const slotRanges = TIME_SLOTS.map((slot, idx) => {
-    if (slot === 'Break') return null;
-    const parts = slot.split('-').map(p => p.trim());
-    const start = parts[0];
-    const end = parts[1];
-    const parse = (t: string) => {
-      const [hStr, mStr] = t.split(':').map(s => s.trim());
-      let h = Number(hStr);
-      const m = Number(mStr || '0');
-      if (idx > BREAK_INDEX && h < 12) h += 12;
-      // special-case 12pm stays 12
-      return h * 60 + m;
-    };
-    return { start: parse(start), end: parse(end) };
-  });
+  const getSessionSlotInfo = (session: ClassSession) => {
+    const startMin = parseTime(session.startTime);
+    const endMin = startMin + (session.durationMinutes || 50);
+    const startSlotIdx = slotRanges.findIndex(r => r && startMin >= r.start && startMin < r.end);
+    if (startSlotIdx === -1) return null;
+
+    let span = 0;
+    for (let i = startSlotIdx; i < slotRanges.length; i++) {
+      const r = slotRanges[i];
+      if (r === null) {
+        if (i + 1 < slotRanges.length && slotRanges[i + 1] && slotRanges[i + 1]!.start < endMin) {
+          span++; 
+        }
+        continue;
+      }
+      if (r.start >= endMin) break;
+      span++;
+    }
+    return { startSlotIdx, colSpan: Math.max(1, span) };
+  };
 
   return (
     <div className="bg-white p-8 font-sans print:p-0 print:m-0" id="uaf-print-body">
@@ -50,13 +77,17 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
           @page { size: landscape; margin: 10mm; }
           body { -webkit-print-color-adjust: exact; }
           #uaf-print-body { width: 100%; border: none; }
+          table { page-break-inside: auto; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
         }
       `}} />
 
       {buildings.map((building, bIdx) => {
         const rooms: any[] = [];
-        Object.values(building.floors || {}).forEach(f => {
-          Object.values(f.rooms || {}).forEach(r => {
+        Object.values(building.floors || {}).forEach((f: any) => {
+          Object.values(f.rooms || {}).forEach((r: any) => {
             rooms.push({ ...r, buildingName: building.name, floorNum: f.number });
           });
         });
@@ -66,70 +97,97 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
         return (
           <div key={bIdx} style={{ pageBreakAfter: 'always' }} className="mb-12 print:mb-0 print:block">
             <div className="text-center mb-6 border-2 border-black p-4">
-              <h1 className="text-2xl font-bold uppercase">Time Table of Spring Semester 2026, Department of {building.name}, UAF</h1>
+              <h1 className="text-2xl font-bold uppercase">
+                Time Table of Spring Semester 2026, Department of {building.name}, UAF
+              </h1>
             </div>
 
             <table className="w-full border-collapse border-2 border-black text-[10px]">
               <thead>
                 <tr className="bg-slate-100">
                   <th className="border border-black p-1 w-12">Day</th>
-                  <th className="border border-black p-1 w-24">Class Room</th>
-                  {TIME_SLOTS.map(slot => (
-                    <th key={slot} className={cn("border border-black p-1", slot === 'Break' && "bg-slate-200")}>
-                      {slot}
+                  <th className="border border-black p-1 w-28">Class Room</th>
+                  {TIME_SLOTS.map((slot, sIdx) => (
+                    <th
+                      key={sIdx}
+                      className={cn(
+                        "border border-black p-1 text-center",
+                        slot === 'Break' && "bg-slate-200 text-slate-500 italic"
+                      )}
+                    >
+                      {slot === 'Break' ? '☕ Break' : slot}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rooms.map((room, idx) => (
-                  <tr key={idx} className="h-16">
-                    {idx === 0 && <td rowSpan={rooms.length} className="border border-black text-center font-bold rotate-180 [writing-mode:vertical-lr]">Mon</td>}
-                    <td className="border border-black p-1 font-bold text-center bg-slate-50">
-                      <div className="text-[8px] uppercase">{room.buildingName}</div>
-                      <div className="text-[9px] leading-tight mt-1">{room.floorNum ? `Floor ${room.floorNum} · ` : ''}{room.name}</div>
-                    </td>
-                    {TIME_SLOTS.map((slot, sIdx) => {
-                      if (slot === 'Break') return <td key={sIdx} className="border border-black bg-slate-100 text-center font-black animate-pulse">BREAK</td>;
+                {DAYS.map(day => {
+                  // Only include rooms that actually have sessions on this day to save space,
+                  // or include all rooms if preferred. We'll include all to maintain structure.
+                  const roomsWithData = rooms.filter(r => r.days && r.days[day] && r.days[day].length > 0);
+                  // If no rooms have classes on this day, we can skip the day entirely to save paper.
+                  if (roomsWithData.length === 0) return null;
 
-                      const startHour = slot.split(':')[0];
-                      // Match session whose startTime falls within this slot's range
-                      const slotRange = slotRanges[sIdx];
-                      let session: any = null;
-                      if (slotRange) {
-                        session = sessions.find(c => {
-                          if (!c?.startTime) return false;
-                          const [sh, sm] = (c.startTime || '').split(':').map(Number);
-                          const minutes = (sh || 0) * 60 + (sm || 0);
-                          return String(c.roomId) === String(room.id) && minutes >= slotRange.start && minutes < slotRange.end;
-                        });
+                  return roomsWithData.map((room, rIdx) => {
+                    const slotMap: Record<number, { session: any; colSpan: number; isStart: boolean }> = {};
+                    
+                    // Highly optimized: fetch directly from the nested hierarchy
+                    const roomSessions = room.days[day] || [];
+
+                    roomSessions.forEach((session: any) => {
+                      const info = getSessionSlotInfo(session);
+                      if (!info) return;
+                      const { startSlotIdx, colSpan } = info;
+                      slotMap[startSlotIdx] = { session, colSpan, isStart: true };
+                      for (let i = 1; i < colSpan; i++) {
+                        const sIdx = startSlotIdx + i;
+                        if (sIdx < TIME_SLOTS.length) {
+                          slotMap[sIdx] = { session, colSpan, isStart: false };
+                        }
                       }
-                      const teacher = session ? data?.teachers.find((t: Teacher) => String(t.id) === String(session.teacherId || session.facultyId)) : null;
+                    });
 
-                      return (
-                        <td key={sIdx} className="border border-black p-1 text-center relative">
-                          {session ? (
-                            <div className="flex flex-col justify-center h-full">
-                              <div className="font-bold">{session.subjectCode}</div>
-                              <div className="text-[8px]">{session.batchId}</div>
-                              <div className="text-[8px] italic">{teacher?.name}</div>
-                            </div>
-                          ) : (
-                            <div className="text-slate-200">-</div>
-                          )}
+                    const teacher = (session: any) =>
+                      session ? data?.teachers.find((t: Teacher) => String(t.id) === String(session.teacherId || session.facultyId)) : null;
+
+                    return (
+                      <tr key={`${day}-${room.id}`} className="border-b border-black">
+                        <td className="border border-black p-1 text-center font-bold text-[10px] whitespace-nowrap">
+                          {day}
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                        <td className="border border-black p-1 font-bold text-center text-[9px] leading-tight whitespace-nowrap">
+                          <div>{room.floorNum ? `Floor ${room.floorNum}` : room.buildingName}</div>
+                          <div>{room.name}</div>
+                        </td>
+
+                        {TIME_SLOTS.map((slot, sIdx) => {
+                          const entry = slotMap[sIdx];
+                          if (entry && !entry.isStart) return null;
+                          if (slot === 'Break') {
+                            return <td key={sIdx} className="border border-black text-center text-[10px] font-bold text-slate-600">Break</td>;
+                          }
+                          if (!entry) {
+                            return <td key={sIdx} className="border border-black p-1 text-center"></td>;
+                          }
+
+                          const { session, colSpan } = entry;
+                          const t = teacher(session);
+                          return (
+                            <td key={sIdx} colSpan={colSpan} className="border border-black p-1 text-center align-middle">
+                              <div className="flex flex-col items-center justify-center gap-0.5 leading-[1.1]">
+                                <div className="font-bold text-[9px] text-black uppercase">{session.subjectCode}</div>
+                                <div className="text-[8px] text-black">{session.batchId}</div>
+                                {t && <div className="text-[8px] text-black whitespace-normal">{t.name}</div>}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  });
+                })}
               </tbody>
             </table>
-
-            <div className="mt-8 flex justify-between text-[10px] font-bold">
-              <span>Generated by NexusTime AI</span>
-              <span>Authentication ID: PROD_UAF_S26</span>
-              <div className="border-t border-black px-12 pt-1">Administrative Authority Signature</div>
-            </div>
           </div>
         );
       })}

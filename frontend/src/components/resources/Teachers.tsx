@@ -3,33 +3,52 @@ import api from '../../services/api.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { Teacher, Department, Course } from '../../types.ts';
 import { useData } from '../../context/DataContext.tsx';
+import { cn } from '../../lib/utils.ts';
 
 const initial: Partial<Teacher> = { name: '', email: '', department: 0, tier: 3, can_teach: [], requested_slots: [] };
 
-// Small tag-input for preferred times
-const TagInput: React.FC<{ value?: string[]; onChange: (v: string[]) => void; placeholder?: string }> = ({ value = [], onChange, placeholder }) => {
-  const [text, setText] = React.useState('');
-  const add = (t: string) => {
-    const v = t.trim();
-    if (!v) return;
-    if (value.includes(v)) return;
-    onChange([...value, v]);
-    setText('');
+
+const TIMES = ['08:00', '08:50', '09:40', '10:30', '11:20', '12:10', '13:10', '14:00', '14:50', '15:40', '16:30', '17:20'];
+
+const PreferenceGrid: React.FC<{ value: string[]; onChange: (v: string[]) => void }> = ({ value = [], onChange }) => {
+  const data = useData();
+  const DAYS = data?.systemSettings?.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const toggle = (slot: string) => {
+    if (value.includes(slot)) onChange(value.filter(s => s !== slot));
+    else onChange([...value, slot]);
   };
-  const remove = (idx: number) => onChange(value.filter((_, i) => i !== idx));
+
   return (
-    <div>
-      <div className="flex gap-2 flex-wrap mb-2">
-        {value.map((t, i) => (
-          <span key={i} className="px-2 py-0.5 bg-slate-100 rounded text-xs flex items-center gap-2">
-            {t}
-            <button onClick={() => remove(i)} className="text-rose-500 text-xs">×</button>
-          </span>
+    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+      <div className="grid bg-slate-50 border-b border-slate-200" style={{ gridTemplateColumns: `auto repeat(${DAYS.length}, minmax(0, 1fr))` }}>
+        <div className="p-2 border-r border-slate-200"></div>
+        {DAYS.map(d => <div key={d} className="p-2 text-[10px] font-black text-slate-500 text-center uppercase tracking-widest">{d}</div>)}
+      </div>
+      <div className="max-h-48 overflow-y-auto">
+        {TIMES.map(t => (
+          <div key={t} className="grid border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors" style={{ gridTemplateColumns: `auto repeat(${DAYS.length}, minmax(0, 1fr))` }}>
+            <div className="p-1.5 text-[9px] font-bold text-slate-400 border-r border-slate-200 flex items-center justify-center bg-slate-50/30">{t}</div>
+            {DAYS.map(d => {
+              const slot = `${d}-${t}`;
+              const isSelected = value.includes(slot);
+              return (
+                <button
+                  key={d}
+                  onClick={() => toggle(slot)}
+                  className={cn(
+                    "h-8 border-r border-slate-100 last:border-0 transition-all duration-200",
+                    isSelected ? "bg-emerald-500 shadow-inner scale-[0.95] rounded-sm" : "hover:bg-emerald-50"
+                  )}
+                />
+              );
+            })}
+          </div>
         ))}
       </div>
-      <div className="flex gap-2">
-        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(text); } }} placeholder={placeholder || 'e.g. 08:00'} className="px-3 py-2 border rounded w-full" />
-        <button onClick={() => add(text)} className="px-3 py-2 bg-emerald-500 text-white rounded">Add</button>
+      <div className="p-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{value.length} slots preferred</span>
+        <button onClick={() => onChange([])} className="text-[10px] font-black text-rose-500 uppercase hover:underline">Clear All</button>
       </div>
     </div>
   );
@@ -138,8 +157,11 @@ const Teachers: React.FC = () => {
             </div>
 
               <div className="mt-3">
-                <label className="block text-xs font-bold text-slate-500 mb-1">Preferred Times (press Enter or Add)</label>
-                <TagInput value={Array.isArray(form.requested_slots) ? form.requested_slots : []} onChange={(v) => setForm({ ...form, requested_slots: v } as Teacher)} placeholder="HH:MM" />
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest flex items-center justify-between">
+                  Preferred Times
+                  <span className="text-[9px] font-normal text-slate-400 normal-case">Algorithm will prioritize these slots based on Tier</span>
+                </label>
+                <PreferenceGrid value={Array.isArray(form.requested_slots) ? form.requested_slots : []} onChange={(v) => setForm({ ...form, requested_slots: v } as Teacher)} />
               </div>
           </div>
 
@@ -207,11 +229,16 @@ const Teachers: React.FC = () => {
                   </div>
                 </td>
                 <td className="py-3 px-4">
-                  <div className="flex flex-wrap gap-1">
-                    {(Array.isArray(t.requested_slots) ? t.requested_slots : []).map((s, i) => (
-                      <span key={i} className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">{s}</span>
-                    ))}
-                    {(!(Array.isArray(t.requested_slots) ? t.requested_slots : []).length) && <span className="text-xs text-slate-400">—</span>}
+                  <div className="flex items-center gap-1">
+                    <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                      {Array.from({ length: 12 }).map((_, i) => {
+                        const count = (Array.isArray(t.requested_slots) ? t.requested_slots : []).length;
+                        return <div key={i} className={cn("flex-1", i < count ? "bg-emerald-500" : "bg-transparent")} />;
+                      })}
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      {(Array.isArray(t.requested_slots) ? t.requested_slots : []).length}
+                    </span>
                   </div>
                 </td>
                 <td className="py-3 px-4 text-right">

@@ -142,8 +142,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const derived: ClassSession[] = [];
         Object.values(mm).forEach(dept => {
           Object.values(dept.floors).forEach((floor: any) => {
-            Object.values((floor as any).rooms).forEach((room: any) => {
-              derived.push(...(room.sessions || []));
+            Object.values(floor.rooms).forEach((room: any) => {
+              if (room.days) {
+                Object.values(room.days).forEach((daySessions: any) => {
+                  derived.push(...(daySessions || []));
+                });
+              } else if (room.sessions) {
+                derived.push(...(room.sessions || []));
+              }
             });
           });
         });

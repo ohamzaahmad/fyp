@@ -43,6 +43,7 @@ function AppContent() {
     zoomLevel: 1.0,
     selectedDepartments: [],
     classes: [],
+    selectedDay: 'Mon',
   });
 
   const { masterMap, setMasterMap, refreshMap, transformToMap, allSessions } = useNexusTimetable(state.classes);
@@ -121,18 +122,7 @@ function AppContent() {
     });
   };
 
-  // Real-time conflict checking when classes change
-  useEffect(() => {
-    const updatedWithConflicts = state.classes.map(c => ({
-      ...c,
-      conflicts: checkConflicts(c, state.classes, data?.teachers)
-    }));
-    
-    // Deep comparison to prevent infinite loop
-    if (JSON.stringify(updatedWithConflicts) !== JSON.stringify(state.classes)) {
-      setState(prev => ({ ...prev, classes: updatedWithConflicts }));
-    }
-  }, [state.classes]);
+
 
   const steps = [
     "Analyzing Constraints...",
@@ -224,6 +214,8 @@ function AppContent() {
                       collapsedBuildings={collapsedBuildings}
                       onToggleBuilding={toggleBuilding}
                       masterMap={state.masterMap}
+                      selectedDay={state.selectedDay}
+                      onDayChange={(day) => setState(prev => ({ ...prev, selectedDay: day }))}
                     />
                   </ProtectedRoute>
                 )}

@@ -11,23 +11,52 @@ interface MobileTimelineProps {
 
 export const MobileTimeline: React.FC<MobileTimelineProps> = ({ classes }) => {
   const data = useData();
-  const sortedClasses = [...classes].sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+  const [selectedDay, setSelectedDay] = React.useState(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()] || 'Mon');
+  const DAYS = data?.systemSettings?.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const filteredClasses = React.useMemo(() => {
+    return classes
+      .filter(c => c.day_of_week === selectedDay || (c as any).dayOfWeek === selectedDay)
+      .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+  }, [classes, selectedDay]);
 
   return (
     <div className="flex-1 bg-slate-50 flex flex-col min-h-0 overflow-y-auto pb-20">
       <div className="p-4 border-b border-white bg-white/50 backdrop-blur-md sticky top-0 z-10">
-        <h2 className="text-lg font-black text-slate-900 tracking-tight">Today's Schedule</h2>
-        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Read-Only Student Mode</p>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">{selectedDay}'s Schedule</h2>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Official UAF Timetable</p>
+          </div>
+          <div className="bg-emerald-500 text-white text-[10px] font-black px-2 py-1 rounded">LIVE</div>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+          {DAYS.map(day => (
+            <button
+              key={day}
+              onClick={() => setSelectedDay(day)}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0",
+                selectedDay === day 
+                  ? "bg-slate-900 text-white shadow-lg scale-105" 
+                  : "bg-white text-slate-400 border border-slate-100 hover:bg-slate-50"
+              )}
+            >
+              {day}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="p-4 space-y-4">
-        {sortedClasses.length === 0 ? (
+        {filteredClasses.length === 0 ? (
           <div className="py-20 flex flex-col items-center justify-center text-slate-400">
             <Clock className="w-12 h-12 mb-4 opacity-20" />
             <p className="text-sm font-medium">No sessions scheduled for today.</p>
           </div>
         ) : (
-          sortedClasses.map((session, idx) => {
+          filteredClasses.map((session, idx) => {
             const teacherId = session.teacherId || session.facultyId;
             const teacher = data?.teachers.find(t => String(t.id) === String(teacherId));
             

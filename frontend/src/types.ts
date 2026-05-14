@@ -75,6 +75,7 @@ export interface ClassSession {
   teacherId?: string;
   facultyId?: string;
   roomId: string;
+  day_of_week: string;
   startTime: string; // HH:mm
   durationMinutes: number;
   conflicts?: ConflictDetail[];
@@ -88,6 +89,7 @@ export interface RoomData {
   name: string;
   capacity: number;
   sessions: ClassSession[];
+  days?: { [day: string]: ClassSession[] };
 }
 
 export interface FloorData {
@@ -119,6 +121,7 @@ export interface SystemConfiguration {
   break_end: string | null;
   max_daily_classes: number;
   gap_penalty: number;
+  working_days: string[];
 }
 
 export interface AppState {
@@ -127,4 +130,5 @@ export interface AppState {
   selectedDepartments: number[];
   classes: ClassSession[];
   masterMap?: MasterMap;
+  selectedDay?: string;
 }

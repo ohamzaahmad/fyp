@@ -102,9 +102,10 @@ class ScheduleEntry(models.Model):
     start_time = models.TimeField()
     duration_minutes = models.IntegerField(default=100)
     is_locked = models.BooleanField(default=False)
+    is_merged = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ['room', 'day_of_week', 'start_time']
+        pass
 
     def __str__(self):
         return f"{self.assignment} @ {self.room} on {self.day_of_week} {self.start_time}"
@@ -135,6 +136,11 @@ class SystemConfiguration(models.Model):
     break_end = models.TimeField(null=True, blank=True, help_text='Local time when a fixed break ends (HH:MM)')
     max_daily_classes = models.IntegerField(default=6, help_text='Soft limit for classes per batch per day')
     gap_penalty = models.FloatField(default=1.0, help_text='Weight for the gap-minimization objective')
+
+    def default_working_days():
+        return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        
+    working_days = models.JSONField(default=default_working_days, help_text='List of working days abbreviation')
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)

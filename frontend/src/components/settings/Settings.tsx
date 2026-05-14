@@ -20,6 +20,7 @@ export const Settings: React.FC = () => {
     break_end: '',
     max_daily_classes: 6,
     gap_penalty: 1.0,
+    working_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as string[],
   });
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export const Settings: React.FC = () => {
         break_end: data.systemSettings.break_end?.substring(0, 5) || '',
         max_daily_classes: data.systemSettings.max_daily_classes || 6,
         gap_penalty: data.systemSettings.gap_penalty || 1.0,
+        working_days: data.systemSettings.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       });
     }
   }, [data.systemSettings]);
@@ -231,6 +233,36 @@ export const Settings: React.FC = () => {
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" 
                 />
                 <p className="text-xs text-slate-400 mt-2">Higher values strictly enforce contiguous classes.</p>
+              </div>
+
+              <div className="md:col-span-2 mt-4 pt-6 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">University Working Days</label>
+                <div className="flex flex-wrap gap-3">
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
+                    const isActive = formData.working_days.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            working_days: isActive 
+                              ? prev.working_days.filter(d => d !== day)
+                              : [...prev.working_days, day]
+                          }));
+                        }}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
+                          isActive 
+                            ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/20' 
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-400 mt-3">Select the days the university is open for scheduling classes.</p>
               </div>
             </div>
           </div>

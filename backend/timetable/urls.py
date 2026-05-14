@@ -19,6 +19,7 @@ from .views import (
     SystemConfigurationView,
     AnalyticsSummaryView,
     BulkImportView,
+    TimetableMergeView,
 )
 
 router = routers.DefaultRouter()
@@ -44,4 +45,5 @@ urlpatterns = [
     path('timetable/settings/', SystemConfigurationView.as_view(), name='timetable-settings'),
     path('analytics/summary/', AnalyticsSummaryView.as_view(), name='analytics-summary'),
     path('timetable/bulk-upload/', BulkImportView.as_view(), name='timetable-bulk-upload'),
+    path('timetable/merge/', TimetableMergeView.as_view(), name='timetable-merge'),
 ]

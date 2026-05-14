@@ -38,7 +38,11 @@ export function useNexusTimetable(initialClasses: ClassSession[]) {
     Object.values(masterMap || {}).forEach(d => {
       Object.values(d.floors || {}).forEach(f => {
         Object.values(f.rooms || {}).forEach(r => {
-          sessions.push(...(r.sessions || []));
+          if (r.days) {
+            Object.values(r.days).forEach(daySessions => {
+              sessions.push(...(daySessions as ClassSession[]));
+            });
+          }
         });
       });
     });

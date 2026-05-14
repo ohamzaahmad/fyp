@@ -171,13 +171,19 @@ export const BatchAnalysis: React.FC = () => {
               </div>
             )}
 
-            <div className="mt-6 flex items-start gap-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
-              <Zap className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-bold text-emerald-900 leading-none mb-1">Opportunity Found</p>
-                <p className="text-xs text-emerald-700/80 leading-relaxed">By moving <span className="font-bold">CS102</span> to <span className="font-bold underline">12:00 PM</span>, you can reduce total daily gaps by <span className="font-bold">120 minutes</span>. This is compatible with Lab-A capacity constraints.</p>
+            {gaps.length > 0 && (
+              <div className="mt-6 flex items-start gap-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                <Zap className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-emerald-900 leading-none mb-1">Opportunity Found</p>
+                  <p className="text-xs text-emerald-700/80 leading-relaxed">
+                    This batch has <span className="font-bold">{gaps.length} gap{gaps.length > 1 ? 's' : ''}</span> totalling{' '}
+                    <span className="font-bold">{totalWasted} minutes</span> of wasted schedule time.
+                    Consider compressing sessions to eliminate these gaps.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -185,24 +191,29 @@ export const BatchAnalysis: React.FC = () => {
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight mb-4">Efficiency Metrics</h3>
             <div className="space-y-4">
-              {[
-                { label: 'Continuous Blocks', value: '45%', color: 'bg-emerald-500' },
-                { label: 'Day Length', value: '8.5h', color: 'bg-amber-500' },
-                { label: 'Wasted Slots', value: '3', color: 'bg-rose-500' },
-              ].map(metric => (
-                <div key={metric.label}>
-                  <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase mb-1">
-                    <span>{metric.label}</span>
-                    <span className="text-slate-900">{metric.value}</span>
+              {(() => {
+                const totalMins = batchClasses.reduce((a, s) => a + (s.durationMinutes || 50), 0);
+                const dayStart = batchClasses.length ? Math.min(...batchClasses.map(s => timeToMinutes(s.startTime))) : START_HOUR * 60;
+                const dayEnd = batchClasses.length ? Math.max(...batchClasses.map(s => timeToMinutes(s.startTime) + (s.durationMinutes || 50))) : END_HOUR * 60;
+                const dayLen = dayEnd - dayStart;
+                const efficiency = dayLen > 0 ? Math.round((totalMins / dayLen) * 100) : 0;
+                const metrics = [
+                  { label: 'Schedule Efficiency', value: `${efficiency}%`, pct: efficiency, color: efficiency > 70 ? 'bg-emerald-500' : efficiency > 40 ? 'bg-amber-500' : 'bg-rose-500' },
+                  { label: 'Day Length', value: dayLen > 0 ? `${(dayLen / 60).toFixed(1)}h` : '—', pct: Math.min(100, (dayLen / ((END_HOUR - START_HOUR) * 60)) * 100), color: 'bg-amber-500' },
+                  { label: 'Wasted Time', value: `${totalWasted}m`, pct: dayLen > 0 ? Math.min(100, (totalWasted / dayLen) * 100) : 0, color: 'bg-rose-500' },
+                ];
+                return metrics.map(metric => (
+                  <div key={metric.label}>
+                    <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase mb-1">
+                      <span>{metric.label}</span>
+                      <span className="text-slate-900">{metric.value}</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                      <div className={cn('h-full', metric.color)} style={{ width: `${metric.pct}%` }} />
+                    </div>
                   </div>
-                  <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                    <div 
-                      className={cn("h-full", metric.color)} 
-                      style={{ width: metric.value.includes('%') ? metric.value : '70%' }} 
-                    />
-                  </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
 

@@ -8,9 +8,12 @@ import Popover from '../ui/Popover.tsx';
 import { Button } from '../ui/Button.tsx';
 
 export const MySchedule: React.FC = () => {
-  const { teachers = [], sessions = [] } = useData();
+  const data = useData();
+  const { teachers = [], sessions = [] } = data;
   const [selectedTeacherId, setSelectedTeacherId] = useState<any>(null);
   const [fetchedSessions, setFetchedSessions] = useState<any[] | null>(null);
+  const [selectedDay, setSelectedDay] = useState(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()] || 'Mon');
+  const DAYS = data?.systemSettings?.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const toast = useToast();
 
   useEffect(() => {
@@ -24,7 +27,6 @@ export const MySchedule: React.FC = () => {
     const load = async () => {
       if (!selectedTeacherId) return setFetchedSessions(null);
       try {
-        // Derive numeric pk if possible
         let pk: number | undefined;
         if (typeof selectedTeacherId === 'number') pk = selectedTeacherId;
         else if (typeof selectedTeacherId === 'string') {
@@ -35,18 +37,12 @@ export const MySchedule: React.FC = () => {
         const data = await getTeacherSchedule(pk);
         if (!mounted) return;
         setFetchedSessions((data && data.entries) ? data.entries.map((e: any) => ({
-          id: e.id,
-          subjectCode: e.subjectCode,
-          batchId: e.batchId,
-          roomId: e.roomId,
-          startTime: e.startTime,
-          durationMinutes: e.durationMinutes,
+          ...e,
+          day_of_week: e.day_of_week || e.dayOfWeek,
         })) : []);
-        try { if (data && data.entries && data.entries.length > 0) toast.show('Schedule loaded', 'success'); } catch(_) {}
       } catch (e) {
         console.warn('MySchedule: failed to load schedule', e);
         setFetchedSessions(null);
-        try { toast.show('Failed to load schedule', 'error'); } catch(_){}
       }
     };
     load();
@@ -54,9 +50,20 @@ export const MySchedule: React.FC = () => {
   }, [selectedTeacherId]);
 
   const selectedTeacher = teachers.find(f => f.id === selectedTeacherId) || null;
-  const teacherSessions = (fetchedSessions && fetchedSessions.length > 0)
-    ? fetchedSessions
-    : sessions.filter(c => (c.teacherId || c.facultyId) === selectedTeacherId);
+  
+  const teacherSessions = React.useMemo(() => {
+    const base = (fetchedSessions && fetchedSessions.length > 0)
+      ? fetchedSessions
+      : sessions.filter(c => (c.teacherId || c.facultyId) === selectedTeacherId);
+    
+    return base
+      .filter(s => s.day_of_week === selectedDay || (s as any).dayOfWeek === selectedDay)
+      .sort((a, b) => {
+         const t1 = (a.startTime || '00:00').split(':').reduce((acc: any, t: any) => acc * 60 + parseInt(t), 0);
+         const t2 = (b.startTime || '00:00').split(':').reduce((acc: any, t: any) => acc * 60 + parseInt(t), 0);
+         return t1 - t2;
+      });
+  }, [fetchedSessions, sessions, selectedTeacherId, selectedDay]);
 
   return (
     <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
@@ -75,15 +82,21 @@ export const MySchedule: React.FC = () => {
               <p className="text-slate-500 font-medium">{selectedTeacher?.department} • Senior Lecturer</p>
             </div>
           </div>
-          <div className="flex gap-8">
-            <div className="text-right">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Weekly Load</p>
-              <p className="text-2xl font-black text-slate-900">18 <span className="text-sm font-bold text-slate-400">/ 20 hrs</span></p>
-            </div>
-            <div className="text-right border-l border-slate-100 pl-8">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Students Reached</p>
-              <p className="text-2xl font-black text-slate-900">452</p>
-            </div>
+          <div className="flex gap-4">
+            {DAYS.map(day => (
+              <button
+                key={day}
+                onClick={() => setSelectedDay(day)}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-black transition-all",
+                  selectedDay === day 
+                    ? "bg-slate-900 text-white shadow-lg" 
+                    : "bg-slate-50 text-slate-400 hover:bg-slate-100"
+                )}
+              >
+                {day}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -91,13 +104,23 @@ export const MySchedule: React.FC = () => {
       <div className="flex-1 p-8 overflow-y-auto">
         <div className="max-w-6xl mx-auto grid grid-cols-3 gap-8">
           <div className="col-span-2 space-y-6">
-            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-              <Calendar className="w-5 h-5 text-emerald-500" />
-              Upcoming Sessions
+            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Calendar className="w-5 h-5 text-emerald-500" />
+                Sessions for {selectedDay}
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full">
+                {teacherSessions.length} Classes
+              </span>
             </h2>
             
             <div className="space-y-4">
-              {teacherSessions.map(session => (
+              {teacherSessions.length === 0 ? (
+                <div className="bg-white p-12 rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400">
+                  <Calendar className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p className="font-bold">No sessions scheduled for {selectedDay}</p>
+                </div>
+              ) : teacherSessions.map(session => (
                 <div key={session.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all group cursor-pointer border-l-8 border-l-emerald-500">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">

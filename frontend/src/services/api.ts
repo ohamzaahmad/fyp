@@ -84,6 +84,45 @@ export const moveClass = async (id: string, newTime: string, roomId?: string): P
   return response.data;
 };
 
+export const createEntry = async (payload: {
+  assignment: number;
+  room: number;
+  day_of_week: string;
+  start_time: string;
+  duration_minutes: number;
+}): Promise<any> => {
+  const response = await api.post('/entries/', payload);
+  return response.data;
+};
+
+export const updateEntry = async (id: string | number, payload: Partial<{
+  assignment: number;
+  room: number;
+  day_of_week: string;
+  start_time: string;
+  duration_minutes: number;
+  is_locked: boolean;
+  is_merged: boolean;
+}>): Promise<any> => {
+  // Clean ID if it has 'entry-' prefix
+  const cleanId = String(id).replace('entry-', '');
+  const response = await api.patch(`/entries/${cleanId}/`, payload);
+  return response.data;
+};
+
+export const deleteEntry = async (id: string | number): Promise<any> => {
+  const cleanId = String(id).replace('entry-', '');
+  const response = await api.delete(`/entries/${cleanId}/`);
+  return response.data;
+};
+
+export const mergeEntries = async (entryIds: string[]): Promise<any> => {
+  // Backend should handle merging by marking entries as merged
+  const response = await api.patch('/timetable/merge/', { entry_ids: entryIds });
+  return response.data;
+};
+
+
 export const generateSchedule = async (options?: any): Promise<{ status: string; task_id: string }> => {
   const response = await api.post('/timetable/generate/', options || {});
   return response.data;

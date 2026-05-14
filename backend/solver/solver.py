@@ -14,48 +14,66 @@ from ortools.sat.python import cp_model
 import math
 
 DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-SLOTS_PER_DAY = 10
+SLOTS_PER_DAY = 12
 SLOT_DURATION = 50  # minutes
 START_HOUR = 8
 START_MINUTE = 0
 
+# Tier-based weights for satisfying preferences
+# Tier 1 = Senior, gets highest priority bonus
+TIER_PRIORITY = {1: 500, 2: 100, 3: 20}
+
+# Define precise slot start times to match frontend constants.ts
+# Note: Break is handled by the gap between index 5 and 6.
+SLOT_START_TIMES = [
+    time(8, 0), time(8, 50), time(9, 40), time(10, 30), time(11, 20), time(12, 10),
+    time(13, 10), time(14, 0), time(14, 50), time(15, 40), time(16, 30), time(17, 20)
+]
+
+def _parse_preference(pref_str: str):
+    """Parses 'Day-HH:MM' into (day_index, slot_index)."""
+    try:
+        parts = pref_str.split('-')
+        day = DAYS.index(parts[0])
+        # Find closest slot index for this HH:MM
+        h, m = map(int, parts[1].split(':'))
+        pref_time = time(h, m)
+        
+        for idx, t in enumerate(SLOT_START_TIMES):
+            if t.hour == h and t.minute == m:
+                return day, idx
+        return None, None
+    except:
+        return None, None
+
 def _slot_to_time(slot_index: int) -> time:
-    """Converts a slot index (0-9) to a start time."""
-    total_minutes = slot_index * SLOT_DURATION
-    base = datetime.combine(datetime.today(), time(START_HOUR, START_MINUTE))
-    target = base + timedelta(minutes=total_minutes)
-    return target.time()
+    if 0 <= slot_index < len(SLOT_START_TIMES):
+        return SLOT_START_TIMES[slot_index]
+    return time(8, 0)
 
 def solve_timetable(time_limit_seconds: int = 60, constraints: dict | None = None) -> bool:
     try:
         from timetable import models
 
         rooms = list(models.Room.objects.all())
-        assignments = list(models.CourseAssignment.objects.select_related('course', 'batch', 'teacher').all())
+        rooms_map = {r.pk: r for r in rooms}
+        # Pre-fetch everything to avoid N+1 queries
+        assignments_list = list(models.CourseAssignment.objects.select_related('course', 'batch', 'teacher').all())
+        assignments_map = {a.pk: a for a in assignments_list}
+        batches = list(models.Batch.objects.all())
         
-        if not rooms or not assignments:
+        if not rooms or not assignments_list:
             return False
 
         model = cp_model.CpModel()
-        
-        # total_slots = days * slots_per_day
         num_days = len(DAYS)
         total_slots = num_days * SLOTS_PER_DAY
 
-        # sessions to schedule
-        # For a 3-hour course (180 mins), we typically do 2 sessions of 100 mins (2 slots each)
-        # or 1 session of 150 mins (3 slots) for labs.
         sessions = []
-        for assign in assignments:
-            # Determine slots needed based on weekly_hours and type
-            if assign.type == 'P': # Practical/Lab
-                # Usually one long session of 3 slots
+        for assign in assignments_list:
+            if assign.type == 'P': # Practical
                 sessions.append({'assign_pk': assign.pk, 'slots': 3, 'id': f'assign_{assign.pk}_0'})
             else:
-                # Theory: 3 hours -> 2 sessions of 2 slots each (total 4 slots = 200 mins approx)
-                # Or 3 slots total. Let's do 2 sessions: one of 2 slots, one of 1 slot? 
-                # University standard is usually 2 sessions of 1.5h (90 mins). 
-                # 2 slots = 100 mins. Let's do 2 sessions of 2 slots each for theory if 3+ hours.
                 num_sessions = 2 if assign.weekly_hours >= 3 else 1
                 slots_per_session = 2
                 for i in range(num_sessions):
@@ -105,9 +123,38 @@ def solve_timetable(time_limit_seconds: int = 60, constraints: dict | None = Non
             # Instead, we use a single interval per session for batch/teacher non-overlap.
             main_interval = model.NewIntervalVar(start_var, num_s, start_var + num_s, f'main_interval_{sid}')
             
-            assign = models.CourseAssignment.objects.get(pk=s['assign_pk'])
+            assign = assignments_map[s['assign_pk']]
             session_intervals.setdefault(('batch', assign.batch.pk), []).append(main_interval)
             session_intervals.setdefault(('teacher', assign.teacher.pk), []).append(main_interval)
+            
+            # ─── Preference Optimization ──────────────────────────────────────
+            # If this session starts at a preferred slot, add a bonus to the objective
+            teacher = assign.teacher
+            tier_bonus = TIER_PRIORITY.get(teacher.tier, 10)
+            prefs = teacher.requested_slots or []
+            
+            for pref in prefs:
+                p_day, p_slot = _parse_preference(pref)
+                if p_day is not None:
+                    # Boolean: Does this session occupy the preferred slot?
+                    # Slot is preferred if start_var <= (p_day*SLOTS + p_slot) < start_var + slots
+                    pref_abs_slot = p_day * SLOTS_PER_DAY + p_slot
+                    is_pref = model.NewBoolVar(f'pref_{sid}_slot_{p_day}_{p_slot}')
+                    
+                    # session_starts[sid] <= pref_abs_slot AND session_starts[sid] + slots > pref_abs_slot
+                    c1 = model.NewBoolVar(f'c1_{sid}_{pref}')
+                    model.Add(start_var <= pref_abs_slot).OnlyEnforceIf(c1)
+                    model.Add(start_var > pref_abs_slot).OnlyEnforceIf(c1.Not())
+                    
+                    c2 = model.NewBoolVar(f'c2_{sid}_{pref}')
+                    model.Add(start_var + num_s > pref_abs_slot).OnlyEnforceIf(c2)
+                    model.Add(start_var + num_s <= pref_abs_slot).OnlyEnforceIf(c2.Not())
+                    
+                    model.AddBoolAnd([c1, c2]).OnlyEnforceIf(is_pref)
+                    model.AddBoolOr([c1.Not(), c2.Not()]).OnlyEnforceIf(is_pref.Not())
+                    
+                    # Weight by tier
+                    s.setdefault('pref_vars', []).append((is_pref, tier_bonus))
 
         # Constraints: No Overlap
         for key, intervals in session_intervals.items():
@@ -115,11 +162,9 @@ def solve_timetable(time_limit_seconds: int = 60, constraints: dict | None = Non
                 model.AddNoOverlap(intervals)
 
         # Objective: Minimize gaps for batches (compact schedule)
-        # For each batch and each day, span = max_end - min_start
-        # Minimize sum of spans.
         batch_spans = []
-        for batch in models.Batch.objects.all():
-            batch_sessions = [s for s in sessions if models.CourseAssignment.objects.get(pk=s['assign_pk']).batch.pk == batch.pk]
+        for batch in batches:
+            batch_sessions = [s for s in sessions if assignments_map[s['assign_pk']].batch.pk == batch.pk]
             if not batch_sessions: continue
             
             for d in range(num_days):
@@ -149,28 +194,29 @@ def solve_timetable(time_limit_seconds: int = 60, constraints: dict | None = Non
 
                 # span for this batch on this day
                 if starts_on_day:
-                    min_s = model.NewIntVar(0, SLOTS_PER_DAY, f'min_s_b{batch.pk}_d{d}')
-                    max_e = model.NewIntVar(0, SLOTS_PER_DAY, f'max_e_b{batch.pk}_d{d}')
-                    
-                    # We only care about span if at least one session is on this day
-                    any_session = model.NewBoolVar(f'any_s_b{batch.pk}_d{d}')
-                    model.AddBoolOr(day_presences).OnlyEnforceIf(any_session)
-                    model.AddBoolAnd([p.Not() for p in day_presences]).OnlyEnforceIf(any_session.Not())
-                    
-                    # If no session, span is 0
+                    # span = max(ends) - min(starts)
+                    # We minimize this to push sessions together
                     span = model.NewIntVar(0, SLOTS_PER_DAY, f'span_b{batch.pk}_d{d}')
-                    # Use a large constant for inactive sessions to not affect min/max
-                    # or just use conditional constraints. 
-                    # Simpler: span >= e_rel - s_rel for all sessions on this day
-                    for i in range(len(batch_sessions)):
-                        model.Add(span >= ends_on_day[i] - starts_on_day[i]).OnlyEnforceIf(day_presences[i])
                     
-                    # To truly minimize span (max-min), it's more complex with optionality.
-                    # For MVP, let's just minimize sum of session start times to push them earlier.
-                    # Or just add a penalty for later sessions.
+                    # To minimize span correctly:
+                    # For all pairs i, j: span >= end[i] - start[j] (if both present)
+                    for i in range(len(batch_sessions)):
+                        for j in range(len(batch_sessions)):
+                            is_both = model.NewBoolVar(f'both_{batch.pk}_d{d}_i{i}_j{j}')
+                            model.AddBoolAnd([day_presences[i], day_presences[j]]).OnlyEnforceIf(is_both)
+                            model.Add(span >= ends_on_day[i] - starts_on_day[j]).OnlyEnforceIf(is_both)
+                    
                     batch_spans.append(span)
 
-        model.Minimize(sum(batch_spans))
+        # Objective Part 2: Maximize preferred slots (negative penalty)
+        pref_bonuses = []
+        for s in sessions:
+            for var, weight in s.get('pref_vars', []):
+                pref_bonuses.append(var * weight)
+
+        # Minimize (Batch Spans - Teacher Preference Bonuses)
+        # Note: we use points, so we'll subtract preferences from the "cost"
+        model.Minimize(sum(batch_spans) * 10 - sum(pref_bonuses))
 
         # Solve
         solver = cp_model.CpSolver()
@@ -195,10 +241,10 @@ def solve_timetable(time_limit_seconds: int = 60, constraints: dict | None = Non
                         room_pk = r.pk
                         break
                 
-                assign = models.CourseAssignment.objects.get(pk=s['assign_pk'])
+                assign = assignments_map[s['assign_pk']]
                 models.ScheduleEntry.objects.create(
                     assignment=assign,
-                    room=models.Room.objects.get(pk=room_pk),
+                    room=rooms_map[room_pk],
                     day_of_week=DAYS[day_idx],
                     start_time=_slot_to_time(slot_idx),
                     duration_minutes=s['slots'] * SLOT_DURATION,

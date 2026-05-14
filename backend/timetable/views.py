@@ -153,12 +153,13 @@ class MasterMapView(APIView):
             if fkey not in result[dkey]['floors']:
                 result[dkey]['floors'][fkey] = {'id': fkey, 'number': room.floor.number, 'rooms': {}}
 
-            result[dkey]['floors'][fkey]['rooms'][rkey] = {
-                'id': rkey,
-                'name': room.name,
-                'capacity': room.capacity,
-                'sessions': [],
-            }
+            if rkey not in result[dkey]['floors'][fkey]['rooms']:
+                result[dkey]['floors'][fkey]['rooms'][rkey] = {
+                    'id': rkey,
+                    'name': room.name,
+                    'capacity': room.capacity,
+                    'days': {d: [] for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']},
+                }
 
         entries = models.ScheduleEntry.objects.select_related('assignment__teacher', 'assignment__course', 'assignment__batch', 'room__floor__department', 'room')
         for entry in entries.all():
@@ -174,7 +175,12 @@ class MasterMapView(APIView):
             if fkey not in result[dkey]['floors']:
                 result[dkey]['floors'][fkey] = {'id': fkey, 'number': room.floor.number, 'rooms': {}}
             if rkey not in result[dkey]['floors'][fkey]['rooms']:
-                result[dkey]['floors'][fkey]['rooms'][rkey] = {'id': rkey, 'name': room.name, 'capacity': room.capacity, 'sessions': []}
+                result[dkey]['floors'][fkey]['rooms'][rkey] = {
+                    'id': rkey, 
+                    'name': room.name, 
+                    'capacity': room.capacity, 
+                    'days': {d: [] for d in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']}
+                }
 
             assign = entry.assignment
             session = {
@@ -186,9 +192,11 @@ class MasterMapView(APIView):
                 'roomId': rkey,
                 'startTime': entry.start_time.strftime('%H:%M'),
                 'durationMinutes': entry.duration_minutes,
+                'day_of_week': entry.day_of_week,
                 'isLocked': entry.is_locked,
+                'isMerged': entry.is_merged,
             }
-            result[dkey]['floors'][fkey]['rooms'][rkey]['sessions'].append(session)
+            result[dkey]['floors'][fkey]['rooms'][rkey]['days'][entry.day_of_week].append(session)
 
         return Response(result)
 
@@ -232,9 +240,33 @@ class TimetableMoveView(APIView):
             'roomId': f'room-{entry.room.pk}' if entry.room else None,
             'startTime': entry.start_time.strftime('%H:%M'),
             'durationMinutes': entry.duration_minutes,
+            'day_of_week': entry.day_of_week,
             'isLocked': entry.is_locked,
+            'isMerged': entry.is_merged,
         }
         return Response(resp)
+
+
+class TimetableMergeView(APIView):
+    permission_classes = [IsAuthenticated]
+    def patch(self, request):
+        entry_ids = request.data.get('entry_ids', [])
+        if not entry_ids:
+            return Response({'error': 'no entry ids provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        pks = []
+        for eid in entry_ids:
+            try:
+                pk = int(eid.split('-', 1)[1]) if isinstance(eid, str) and eid.startswith('entry-') else int(eid)
+                pks.append(pk)
+            except Exception:
+                continue
+        
+        if not pks:
+            return Response({'error': 'no valid entry ids found'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        models.ScheduleEntry.objects.filter(pk__in=pks).update(is_merged=True)
+        return Response({'status': 'success', 'merged_count': len(pks)})
 
 
 class TimetableGenerateView(APIView):

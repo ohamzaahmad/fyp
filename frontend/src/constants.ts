@@ -109,3 +109,31 @@ export function setRuntimeData(data: Partial<{ DEPARTMENTS: Department[]; BUILDI
     INITIAL_CLASSES,
   };
 }
+
+export const TIME_SLOTS = [
+  '8:00 - 8:50', '8:50 - 9:40', '9:40 - 10:30', '10:30 - 11:20', '11:20 - 12:10', '12:10 - 1:00',
+  'Break',
+  '1:10 - 2:00', '2:00 - 2:50', '2:50 - 3:40', '3:40 - 4:30', '4:30 - 5:20', '5:20 - 6:10'
+];
+
+export const parseTime = (t: string) => {
+  const [hStr, mStr] = t.split(':').map(s => s.trim());
+  let h = Number(hStr);
+  const m = Number(mStr || '0');
+  // Simple heuristic: hours 1-7 are PM
+  if (h >= 1 && h <= 7) h += 12;
+  return h * 60 + m;
+};
+
+export const getSlotRanges = () => {
+  return TIME_SLOTS.map((slot, idx) => {
+    if (slot === 'Break') return null;
+    const parts = slot.split('-').map(p => p.trim());
+    return { 
+      start: parseTime(parts[0]), 
+      end: parseTime(parts[1]),
+      label: slot,
+      index: idx
+    };
+  });
+};
