@@ -13,20 +13,17 @@ import { Sidebar } from './components/layout/Sidebar.tsx';
 import { Header } from './components/layout/Header.tsx';
 import TimetableGrid from './components/timetable/TimetableGrid.tsx';
 import { ControlRoom } from './components/control-room/ControlRoom.tsx';
-import { GapAnalyzer } from './components/gap-analyzer/GapAnalyzer.tsx';
 import { AppState, Department, ClassSession } from './types.ts';
 import { DataProvider, useData } from './context/DataContext.tsx';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wand2, Loader2, CheckCircle2, Search, Command, Lock as LockIcon, Smartphone } from 'lucide-react';
-
-import { timeToMinutes, checkConflicts, findMergeCandidates } from './services/timetableLogic.ts';
 import { MobileTimeline } from './components/mobile/MobileTimeline.tsx';
-import { BulkImport } from './components/timetable/BulkImport.tsx';
 import TimetablePrintView from './components/timetable/TimetablePrintView.tsx';
 import { Dashboard } from './components/timetable/Dashboard.tsx';
-import MasterMapViewer from './components/debug/MasterMapViewer.tsx';
 import { TeacherPortal } from './components/control-room/TeacherPortal.tsx';
 import AdminConsole from './components/admin/AdminConsole.tsx';
+
+import { timeToMinutes, checkConflicts, findMergeCandidates } from './services/timetableLogic.ts';
 
 import * as api from './services/api.ts';
 import { useNexusTimetable } from './hooks/useNexusTimetable.ts';
@@ -260,22 +257,9 @@ function AppContent() {
                     <TeacherPortal />
                   </ProtectedRoute>
                 )}
-                {state.view === 'student' && <GapAnalyzer />}
-                {state.view === 'rooms' && (
-                  <ProtectedRoute allowedRoles={['ADMIN']}>
-                    <BulkImport />
-                  </ProtectedRoute>
-                )}
                 {state.view === 'dashboard' && (
                   <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
                     <Dashboard />
-                  </ProtectedRoute>
-                )}
-                {state.view === 'mastermap-debug' && (
-                  <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
-                    <div className="p-4">
-                      <MasterMapViewer />
-                    </div>
                   </ProtectedRoute>
                 )}
                 {state.view === 'export' && (

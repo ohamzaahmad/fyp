@@ -108,7 +108,7 @@ export interface MasterMap {
 export type NexusMasterMap = MasterMap;
 
 export interface AppState {
-  view: 'dashboard' | 'timetable' | 'teachers' | 'rooms' | 'student' | 'settings' | 'export' | 'teacher' | 'mastermap-debug' | 'admin';
+  view: 'dashboard' | 'timetable' | 'teachers' | 'settings' | 'export' | 'teacher' | 'admin';
   zoomLevel: number;
   selectedDepartments: number[];
   classes: ClassSession[];

@@ -3,9 +3,7 @@ import {
   LayoutDashboard, 
   CalendarRange, 
   Users, 
-  GraduationCap, 
   Settings, 
-  FileUp, 
   ChevronLeft, 
   ChevronRight,
   Zap,
@@ -13,7 +11,6 @@ import {
   LogOut,
   Eye,
   EyeOff,
-  Map,
   Sparkles
 } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
@@ -37,12 +34,9 @@ interface SidebarProps {
 const NAV_ITEMS: { id: string; label: string; icon: any; roles?: UserRole[] }[] = [
   { id: 'dashboard', label: 'Analytics Core', icon: LayoutDashboard, roles: ['ADMIN', 'TEACHER'] },
   { id: 'timetable', label: 'Master Map', icon: CalendarRange, roles: ['ADMIN', 'TEACHER'] },
-  { id: 'teachers', label: 'AI Suggestions', icon: Sparkles, roles: ['ADMIN'] },
+  { id: 'teachers', label: 'AI Insights', icon: Sparkles, roles: ['ADMIN'] },
   { id: 'admin', label: 'Admin Console', icon: Users, roles: ['ADMIN'] },
-  { id: 'mastermap-debug', label: 'Master Map (Debug)', icon: Map, roles: ['ADMIN', 'TEACHER'] },
   { id: 'teacher', label: 'Teacher Portal', icon: User, roles: ['TEACHER', 'ADMIN'] },
-  { id: 'rooms', label: 'Bulk Ingest', icon: FileUp, roles: ['ADMIN'] },
-  { id: 'student', label: 'Batch Diagnostic', icon: GraduationCap },
   { id: 'export', label: 'UAF Official Print', icon: CalendarRange, roles: ['ADMIN'] },
   { id: 'settings', label: 'System Config', icon: Settings, roles: ['ADMIN'] },
 ];

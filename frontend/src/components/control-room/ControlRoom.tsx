@@ -1,10 +1,12 @@
-import React from 'react';
-import { Sparkles, Users, FileBarChart, Check, Trash2, ArrowUpRight, AlertTriangle, Clock, CalendarX } from 'lucide-react';
+import React, { useState } from 'react';
+import { Sparkles, Users, Check, AlertTriangle, Clock, CalendarX, GraduationCap } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { useToast } from '../ui/Toast.tsx';
+import { GapAnalyzer } from '../gap-analyzer/GapAnalyzer.tsx';
 
 export const ControlRoom: React.FC = () => {
   const toast = useToast();
+  const [activeTab, setActiveTab] = useState<'suggestions' | 'diagnostic'>('suggestions');
   
   const handleApproveMerge = (id: number) => {
     toast.show(`Merge recommendation #${id} approved! Timetable updated.`, 'success');
@@ -15,9 +17,42 @@ export const ControlRoom: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 p-8 bg-slate-50 flex gap-8 overflow-y-auto">
-      {/* Main Panel */}
-      <div className="flex-1 space-y-8">
+    <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
+      {/* Tab Bar */}
+      <div className="flex items-center gap-1 px-8 pt-6 pb-0 border-b border-slate-200 bg-white">
+        <div className="mr-4">
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">AI Insights</h1>
+          <p className="text-xs text-slate-400 font-medium">Scheduling intelligence &amp; batch diagnostics</p>
+        </div>
+        <div className="flex items-end gap-1 ml-auto">
+          {([
+            { id: 'suggestions', label: 'AI Suggestions', icon: Sparkles },
+            { id: 'diagnostic', label: 'Batch Diagnostic', icon: GraduationCap },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                'flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-xs font-bold transition-all border border-b-0',
+                activeTab === tab.id
+                  ? 'bg-slate-50 border-slate-200 text-slate-900'
+                  : 'bg-transparent border-transparent text-slate-400 hover:text-slate-700 hover:bg-slate-50/50'
+              )}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'diagnostic' ? (
+        <GapAnalyzer />
+      ) : (
+      <div className="flex-1 p-8 flex gap-8 overflow-y-auto">
+        {/* Main Panel */}
+        <div className="flex-1 space-y-8">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">AI Suggestions</h1>
           <p className="text-slate-500 mt-1">Intelligent recommendations to optimize your master timetable.</p>
@@ -168,6 +203,8 @@ export const ControlRoom: React.FC = () => {
           </p>
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 };

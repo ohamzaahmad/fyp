@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { ClassSession, MasterMap } from '../../types.ts';
 import { TimeSlotCard } from './TimeSlotCard.tsx';
 import { cn } from '../../lib/utils.ts';
-import { Building as BuildingIcon, Maximize2, Minimize2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Building as BuildingIcon, Maximize2, Minimize2, ChevronDown, ChevronRight, Code2, LayoutGrid, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { useData } from '../../context/DataContext.tsx';
 
@@ -60,8 +60,59 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
     }));
   }, [masterMap, data?.masterMap]);
 
+  const [showDebug, setShowDebug] = useState(false);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white relative">
+      {/* Toolbar: Debug Toggle */}
+      <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-slate-100 bg-slate-50/70">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-auto">Master Map</span>
+        <button
+          onClick={() => setShowDebug(false)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all',
+            !showDebug ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:bg-slate-100'
+          )}
+        >
+          <LayoutGrid className="w-3.5 h-3.5" />
+          Visual
+        </button>
+        <button
+          onClick={() => setShowDebug(true)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all',
+            showDebug ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:bg-slate-100'
+          )}
+        >
+          <Code2 className="w-3.5 h-3.5" />
+          Debug JSON
+        </button>
+      </div>
+
+      {showDebug ? (
+        <div className="flex-1 overflow-auto p-6 bg-slate-950">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-emerald-400 font-mono">MasterMap — Raw Data Dump</h3>
+            <button
+              onClick={() => data?.refreshMasterMap?.()}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Refresh
+            </button>
+          </div>
+          {data?.isLoading && <p className="text-slate-400 text-sm font-mono">Loading...</p>}
+          {data?.error && <p className="text-rose-400 text-sm font-mono">Error: {data.error}</p>}
+          {data?.masterMap && (
+            <pre className="text-xs text-emerald-300 font-mono leading-relaxed whitespace-pre-wrap break-all">
+              {JSON.stringify(data.masterMap, null, 2)}
+            </pre>
+          )}
+          {!data?.isLoading && !data?.error && !data?.masterMap && (
+            <p className="text-slate-500 text-sm font-mono">No master map data available.</p>
+          )}
+        </div>
+      ) : (
+      <>
       <div className="flex-1 overflow-auto no-scrollbar scroll-smooth" id="grid-container">
         <DndContext sensors={sensors}>
           <div className="min-w-max flex flex-col" style={{ width: `calc(${totalWidth}px + 140px)` }}>
@@ -177,6 +228,8 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
           <Maximize2 className="w-4 h-4" />
         </button>
       </div>
+      </>
+      )}
     </div>
   );
 };
