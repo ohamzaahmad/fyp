@@ -1,185 +1,237 @@
 import React, { useEffect, useState } from 'react';
 import { useData } from '../../context/DataContext.tsx';
 import { useAuth } from '../../context/AuthContext.tsx';
-import { setApiBaseUrl, generateSchedule } from '../../services/api.ts';
-import api from '../../services/api.ts';
-
-type Constraints = {
-  breakStart: string;
-  breakEnd: string;
-  maxDailyClasses: number;
-  gapPenalty: number;
-};
+import { updateSystemSettings } from '../../services/api.ts';
+import { Building2, Save, GraduationCap, Clock, Type, Image as ImageIcon } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const data = useData();
   const { logout } = useAuth();
 
-  const [apiUrl, setApiUrl] = useState<string>('');
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [headerVisible, setHeaderVisible] = useState<boolean>(true);
   const [saving, setSaving] = useState(false);
-  const [constraints, setConstraints] = useState<Constraints>({ breakStart: '13:00', breakEnd: '14:00', maxDailyClasses: 6, gapPenalty: 1 });
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  const [formData, setFormData] = useState({
+    app_name: '',
+    org_name: '',
+    academic_term: '',
+    logo_url: '',
+    break_start: '',
+    break_end: '',
+    max_daily_classes: 6,
+    gap_penalty: 1.0,
+  });
 
   useEffect(() => {
-    const storedApi = typeof window !== 'undefined' ? localStorage.getItem('nexus_api_base') : null;
-    const envApi = (import.meta as any).env?.VITE_API_URL as string | undefined;
-    setApiUrl(storedApi || envApi || '/api');
-
+    // Load local theme
     const storedTheme = typeof window !== 'undefined' ? localStorage.getItem('nexus_theme') : null;
-    if (storedTheme === 'dark' || (!storedTheme && document.documentElement.classList.contains('dark'))) setTheme('dark');
-    else setTheme('light');
-
-    const storedHeader = typeof window !== 'undefined' ? localStorage.getItem('nexus_header_visible') : null;
-    setHeaderVisible(storedHeader === null ? true : storedHeader === 'true');
-
-    const storedConstraints = typeof window !== 'undefined' ? localStorage.getItem('nexus_constraints') : null;
-    if (storedConstraints) {
-      try {
-        const parsed = JSON.parse(storedConstraints);
-        setConstraints(c => ({ ...c, ...parsed }));
-      } catch (e) {
-        // ignore
-      }
+    if (storedTheme === 'dark' || (!storedTheme && document.documentElement.classList.contains('dark'))) {
+      setTheme('dark');
+    } else {
+      setTheme('light');
     }
-  }, []);
+
+    // Load system settings from context
+    if (data.systemSettings) {
+      setFormData({
+        app_name: data.systemSettings.app_name || '',
+        org_name: data.systemSettings.org_name || '',
+        academic_term: data.systemSettings.academic_term || '',
+        logo_url: data.systemSettings.logo_url || '',
+        break_start: data.systemSettings.break_start?.substring(0, 5) || '',
+        break_end: data.systemSettings.break_end?.substring(0, 5) || '',
+        max_daily_classes: data.systemSettings.max_daily_classes || 6,
+        gap_penalty: data.systemSettings.gap_penalty || 1.0,
+      });
+    }
+  }, [data.systemSettings]);
 
   const applyTheme = (t: 'light' | 'dark') => {
     if (t === 'dark') document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
     localStorage.setItem('nexus_theme', t);
+    setTheme(t);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Update API base URL runtime
-      setApiBaseUrl(apiUrl && apiUrl !== '' ? apiUrl : null);
-
-      // Apply theme
       applyTheme(theme);
+      
+      const payload = {
+        ...formData,
+        break_start: formData.break_start || null,
+        break_end: formData.break_end || null,
+      };
 
-      // Header visibility
-      localStorage.setItem('nexus_header_visible', headerVisible ? 'true' : 'false');
-      // Notify app of header visibility change
-      window.dispatchEvent(new CustomEvent('nexus:settings-updated', { detail: { headerVisible } }));
-
-      // Persist solver constraints locally and notify
-      try {
-        localStorage.setItem('nexus_constraints', JSON.stringify(constraints));
-        window.dispatchEvent(new CustomEvent('nexus:constraints-updated', { detail: constraints }));
-      } catch (e) {
-        console.warn('Failed to save constraints', e);
-      }
-
-      // Persist constraints server-side for admins when possible
-      try {
-        await api.post('/timetable/constraints/', {
-          break_start: constraints.breakStart,
-          break_end: constraints.breakEnd,
-          max_daily_classes: constraints.maxDailyClasses,
-          gap_penalty: constraints.gapPenalty,
-        });
-      } catch (err) {
-        // Ignore failures (user may be unauthenticated or not admin)
-      }
-
-      // Optionally refresh public data
-      try {
-        await data.refreshAll();
-      } catch (e) {
-        // ignore
-      }
+      await updateSystemSettings(payload);
+      await data.refreshAll(); // Refresh to update the global context strings
+    } catch (err) {
+      console.error("Failed to save settings", err);
+      alert("Failed to save settings. Check console for details.");
     } finally {
       setSaving(false);
     }
   };
 
   const handleLogoutClear = () => {
-    // Clear tokens and reload
     logout();
-    // Also clear runtime data
-    localStorage.removeItem('__NEXUS_DATA__');
-    localStorage.removeItem('nexus_api_base');
-    localStorage.removeItem('nexus_theme');
-    localStorage.removeItem('nexus_header_visible');
+    localStorage.clear();
   };
 
   return (
     <div className="flex-1 p-8 bg-slate-50 overflow-y-auto">
-      <div className="max-w-4xl mx-auto bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <h2 className="text-xl font-black mb-4">System Settings</h2>
-        <div className="space-y-4">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <label className="text-sm font-bold block mb-1">API Base URL</label>
-            <input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} className="w-full border border-slate-200 rounded px-3 py-2" />
-            <p className="text-xs text-slate-400 mt-1">Runtime override for backend API base. Empty or '/api' uses relative path.</p>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">System Settings</h1>
+            <p className="text-sm text-slate-500 font-medium mt-1">Manage global configurations and preferences</p>
           </div>
-
-          <div>
-            <label className="text-sm font-bold block mb-1">Theme</label>
-            <div className="flex gap-2">
-              <button onClick={() => setTheme('light')} className={`px-3 py-2 rounded ${theme === 'light' ? 'bg-slate-900 text-white' : 'bg-slate-50'}`}>Light</button>
-              <button onClick={() => setTheme('dark')} className={`px-3 py-2 rounded ${theme === 'dark' ? 'bg-slate-900 text-white' : 'bg-slate-50'}`}>Dark</button>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-bold block mb-1">Top Bar</label>
-            <div className="flex items-center gap-3">
-              <input id="headerVisible" type="checkbox" checked={headerVisible} onChange={(e) => setHeaderVisible(e.target.checked)} />
-              <label htmlFor="headerVisible" className="text-sm">Show top bar</label>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">Toggle the header visibility for a compact workspace.</p>
-          </div>
-
           <div className="flex items-center gap-3">
-            <button onClick={handleSave} disabled={saving} className="bg-emerald-500 text-white px-4 py-2 rounded font-bold">{saving ? 'Saving...' : 'Save & Apply'}</button>
-            <button onClick={() => data.refreshAll()} className="px-4 py-2 rounded border border-slate-200">Refresh Data</button>
-            <button onClick={handleLogoutClear} className="px-4 py-2 rounded border border-rose-200 text-rose-600">Logout & Clear</button>
+            <button 
+              onClick={handleSave} 
+              disabled={saving} 
+              className="flex items-center gap-2 px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
           </div>
-          
-          <div className="mt-6 border-t pt-4">
-            <h3 className="font-bold mb-2">Solver Constraints (runtime)</h3>
-            <div className="grid grid-cols-2 gap-3 items-center">
-              <div>
-                <label className="text-xs block mb-1">Break Start</label>
-                <input type="time" value={constraints.breakStart} onChange={(e) => setConstraints(c => ({ ...c, breakStart: e.target.value }))} className="w-full border rounded px-2 py-1" />
+        </div>
+
+        <div className="space-y-6">
+          {/* General Settings */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
+              <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                <Building2 className="w-5 h-5" />
               </div>
+              <h3 className="font-bold text-slate-800">General Identity</h3>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="text-xs block mb-1">Break End</label>
-                <input type="time" value={constraints.breakEnd} onChange={(e) => setConstraints(c => ({ ...c, breakEnd: e.target.value }))} className="w-full border rounded px-2 py-1" />
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Application Name</label>
+                <div className="relative">
+                  <Type className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    name="app_name"
+                    value={formData.app_name} 
+                    onChange={handleChange} 
+                    placeholder="NexusTime AI"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" 
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-2">Displayed in the main navigation sidebar.</p>
               </div>
+
               <div>
-                <label className="text-xs block mb-1">Max Daily Classes</label>
-                <input type="number" min={1} max={12} value={constraints.maxDailyClasses} onChange={(e) => setConstraints(c => ({ ...c, maxDailyClasses: Number(e.target.value) }))} className="w-full border rounded px-2 py-1" />
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Organization Name</label>
+                <div className="relative">
+                  <Building2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    name="org_name"
+                    value={formData.org_name} 
+                    onChange={handleChange} 
+                    placeholder="University Name"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" 
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-2">Used for official timetable printouts.</p>
               </div>
-              <div>
-                <label className="text-xs block mb-1">Gap Penalty Weight</label>
-                <input type="number" min={0} step={0.1} value={constraints.gapPenalty} onChange={(e) => setConstraints(c => ({ ...c, gapPenalty: Number(e.target.value) }))} className="w-full border rounded px-2 py-1" />
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Academic Term</label>
+                <div className="relative">
+                  <GraduationCap className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    name="academic_term"
+                    value={formData.academic_term} 
+                    onChange={handleChange} 
+                    placeholder="e.g. Fall 2026 Semester"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" 
+                  />
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Logo URL</label>
+                <div className="relative">
+                  <ImageIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    name="logo_url"
+                    value={formData.logo_url} 
+                    onChange={handleChange} 
+                    placeholder="https://example.com/logo.png"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" 
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-2">Public URL for the organization logo (Header/Login/Sidebar).</p>
               </div>
             </div>
+          </div>
 
-            <div className="mt-4 flex gap-3">
-              <button onClick={async () => {
-                setSaving(true);
-                try {
-                  // send constraints to the generate endpoint (backend may accept them)
-                  const res = await generateSchedule({ constraints });
-                  // simple user feedback; UI can be improved
-                  alert(`Solver task: ${res?.task_id || 'enqueued'}`);
-                } catch (err) {
-                  console.error(err);
-                  alert('Failed to start solver with provided constraints');
-                } finally {
-                  setSaving(false);
-                }
-              }} className="px-4 py-2 rounded bg-indigo-600 text-white">Run Solver with Constraints</button>
-              <button onClick={() => {
-                localStorage.removeItem('nexus_constraints');
-                setConstraints({ breakStart: '13:00', breakEnd: '14:00', maxDailyClasses: 6, gapPenalty: 1 });
-                window.dispatchEvent(new CustomEvent('nexus:constraints-updated', { detail: null }));
-              }} className="px-4 py-2 rounded border">Reset Constraints</button>
+          {/* Scheduling Rules */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
+              <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                <Clock className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-slate-800">Global Scheduling Rules</h3>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Break Start Time</label>
+                <input 
+                  type="time" 
+                  name="break_start"
+                  value={formData.break_start} 
+                  onChange={handleChange} 
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Break End Time</label>
+                <input 
+                  type="time" 
+                  name="break_end"
+                  value={formData.break_end} 
+                  onChange={handleChange} 
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Max Daily Classes (Per Batch)</label>
+                <input 
+                  type="number" 
+                  min={1} 
+                  max={12} 
+                  name="max_daily_classes"
+                  value={formData.max_daily_classes} 
+                  onChange={handleChange} 
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Gap Penalty Weight</label>
+                <input 
+                  type="number" 
+                  min={0} 
+                  step={0.1} 
+                  name="gap_penalty"
+                  value={formData.gap_penalty} 
+                  onChange={handleChange} 
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" 
+                />
+                <p className="text-xs text-slate-400 mt-2">Higher values strictly enforce contiguous classes.</p>
+              </div>
             </div>
           </div>
         </div>

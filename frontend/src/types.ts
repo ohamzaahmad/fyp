@@ -107,8 +107,19 @@ export interface MasterMap {
 
 export type NexusMasterMap = MasterMap;
 
+export interface SystemConfiguration {
+  app_name: string;
+  org_name: string;
+  academic_term: string;
+  logo_url: string | null;
+  break_start: string | null;
+  break_end: string | null;
+  max_daily_classes: number;
+  gap_penalty: number;
+}
+
 export interface AppState {
-  view: 'dashboard' | 'timetable' | 'teachers' | 'settings' | 'export' | 'teacher' | 'admin';
+  view: 'dashboard' | 'timetable' | 'suggestions' | 'settings' | 'export' | 'schedule' | 'resources';
   zoomLevel: number;
   selectedDepartments: number[];
   classes: ClassSession[];

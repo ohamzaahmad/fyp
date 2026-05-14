@@ -66,3 +66,9 @@ class TimetableConstraintSerializer(serializers.ModelSerializer):
         model = models.TimetableConstraint
         fields = ['id', 'break_start', 'break_end', 'max_daily_classes', 'gap_penalty', 'metadata', 'created_by', 'created_at']
         read_only_fields = ['id', 'created_by', 'created_at']
+
+class SystemConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.SystemConfiguration
+        fields = '__all__'
+        read_only_fields = ['id', 'updated_at', 'updated_by']

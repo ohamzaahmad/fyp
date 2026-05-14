@@ -387,3 +387,20 @@ class TimetableConstraintsView(APIView):
         ser.is_valid(raise_exception=True)
         obj = ser.save(created_by=request.user)
         return Response(serializers.TimetableConstraintSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+class SystemConfigurationView(APIView):
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [AllowAny()]
+        return [IsAdminUser()]
+
+    def get(self, request):
+        config, created = models.SystemConfiguration.objects.get_or_create(id=1)
+        return Response(serializers.SystemConfigurationSerializer(config).data)
+
+    def post(self, request):
+        config, created = models.SystemConfiguration.objects.get_or_create(id=1)
+        ser = serializers.SystemConfigurationSerializer(config, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        obj = ser.save(updated_by=request.user)
+        return Response(serializers.SystemConfigurationSerializer(obj).data)

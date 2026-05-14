@@ -67,10 +67,16 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-30 shadow-sm">
       <div className="flex items-center gap-6 flex-1">
         <div className="flex items-center gap-3 mr-3">
-          <div className="w-9 h-9 bg-emerald-600 rounded-md flex items-center justify-center text-white font-black">N</div>
+          {data?.systemSettings?.logo_url ? (
+            <img src={data.systemSettings.logo_url} alt="Logo" className="w-9 h-9 object-contain" />
+          ) : (
+            <div className="w-9 h-9 bg-emerald-600 rounded-md flex items-center justify-center text-white font-black">
+              {data?.systemSettings?.app_name ? data.systemSettings.app_name[0] : 'N'}
+            </div>
+          )}
           <div>
-            <div className="text-sm font-black">Nexus</div>
-            <div className="text-[10px] text-slate-400 -mt-0.5">Timetable</div>
+            <div className="text-sm font-black">{data?.systemSettings?.app_name || 'NexusTime'}</div>
+            <div className="text-[10px] text-slate-400 -mt-0.5">{data?.systemSettings?.academic_term || 'Timetable'}</div>
           </div>
         </div>
 
@@ -113,9 +119,9 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-3">
           <div className="relative">{renderDonut(efficiency)}</div>
           <ConfirmDialog
-            trigger={<Button className="flex items-center gap-2 px-4 py-2">Generate Optimized</Button>}
-            title="Run Optimization"
-            description="This will enqueue the optimizer job in the background. Proceed?"
+            trigger={<Button className="flex items-center gap-2 px-4 py-2">Generate Timetable</Button>}
+            title="Generate Timetable"
+            description="This will run the AI scheduler in the background. Proceed?"
             onConfirm={async () => {
               try {
                 await generateSchedule();
@@ -127,7 +133,8 @@ export const Header: React.FC<HeaderProps> = ({
           />
 
           <Popover trigger={<button className="p-2 rounded-md text-slate-600 hover:bg-slate-100"><HelpCircle className="w-4 h-4" /></button>}>
-            <div className="text-sm text-slate-700 p-4">University Scheduling System (NexusTime)</div>
+            <div className="text-sm text-slate-700 p-4 font-semibold">{data?.systemSettings?.org_name || 'Organization'}</div>
+            <div className="text-xs text-slate-500 px-4 pb-4">{data?.systemSettings?.app_name || 'Scheduling System'} - {data?.systemSettings?.academic_term || ''}</div>
           </Popover>
 
           <div className="flex items-center gap-2 pl-2">

@@ -45,3 +45,7 @@ class ScheduleEntryAdmin(admin.ModelAdmin):
 @admin.register(models.TimetableConstraint)
 class TimetableConstraintAdmin(admin.ModelAdmin):
     list_display = ('id', 'break_start', 'break_end', 'max_daily_classes', 'gap_penalty', 'created_by', 'created_at')
+
+@admin.register(models.SystemConfiguration)
+class SystemConfigurationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'app_name', 'org_name', 'academic_term', 'updated_at')

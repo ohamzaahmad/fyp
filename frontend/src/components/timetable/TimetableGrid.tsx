@@ -66,7 +66,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
     <div className="flex-1 flex flex-col overflow-hidden bg-white relative">
       {/* Toolbar: Debug Toggle */}
       <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-slate-100 bg-slate-50/70">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-auto">Master Map</span>
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-auto">Timetable</span>
         <button
           onClick={() => setShowDebug(false)}
           className={cn(
@@ -85,14 +85,14 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
           )}
         >
           <Code2 className="w-3.5 h-3.5" />
-          Debug JSON
+          Raw Data
         </button>
       </div>
 
       {showDebug ? (
         <div className="flex-1 overflow-auto p-6 bg-slate-950">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-emerald-400 font-mono">MasterMap — Raw Data Dump</h3>
+            <h3 className="text-sm font-bold text-emerald-400 font-mono">MasterMap — Raw Data</h3>
             <button
               onClick={() => data?.refreshMasterMap?.()}
               className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors"
@@ -108,7 +108,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
             </pre>
           )}
           {!data?.isLoading && !data?.error && !data?.masterMap && (
-            <p className="text-slate-500 text-sm font-mono">No master map data available.</p>
+            <p className="text-slate-500 text-sm font-mono">No timetable data available.</p>
           )}
         </div>
       ) : (

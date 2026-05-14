@@ -16,7 +16,7 @@ from .views import (
     MasterMapView,
     TimetableMoveView,
     TimetableGenerateView,
-    TimetableConstraintsView,
+    SystemConfigurationView,
     AnalyticsSummaryView,
     BulkImportView,
 )
@@ -41,7 +41,7 @@ urlpatterns = [
     path('timetable/master-map/', MasterMapView.as_view(), name='timetable-master-map'),
     path('timetable/<str:entry_id>/move/', TimetableMoveView.as_view(), name='timetable-move'),
     path('timetable/generate/', TimetableGenerateView.as_view(), name='timetable-generate'),
-    path('timetable/constraints/', TimetableConstraintsView.as_view(), name='timetable-constraints'),
+    path('timetable/settings/', SystemConfigurationView.as_view(), name='timetable-settings'),
     path('analytics/summary/', AnalyticsSummaryView.as_view(), name='analytics-summary'),
     path('timetable/bulk-upload/', BulkImportView.as_view(), name='timetable-bulk-upload'),
 ]

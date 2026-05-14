@@ -214,3 +214,13 @@ export const bulkUpload = async (file: File | null, rows?: any[]) => {
 };
 
 export default api;
+
+export const fetchSystemSettings = async (): Promise<any> => {
+  const response = await publicApi.get('/timetable/settings/');
+  return response.data;
+};
+
+export const updateSystemSettings = async (payload: any): Promise<any> => {
+  const response = await api.post('/timetable/settings/', payload);
+  return response.data;
+};

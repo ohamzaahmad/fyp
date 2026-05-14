@@ -7,8 +7,8 @@ import { useToast } from '../ui/Toast.tsx';
 import Popover from '../ui/Popover.tsx';
 import { Button } from '../ui/Button.tsx';
 
-export const TeacherPortal: React.FC = () => {
-  const { teachers = [], initialClasses = [] } = useData();
+export const MySchedule: React.FC = () => {
+  const { teachers = [], sessions = [] } = useData();
   const [selectedTeacherId, setSelectedTeacherId] = useState<any>(null);
   const [fetchedSessions, setFetchedSessions] = useState<any[] | null>(null);
   const toast = useToast();
@@ -42,12 +42,11 @@ export const TeacherPortal: React.FC = () => {
           startTime: e.startTime,
           durationMinutes: e.durationMinutes,
         })) : []);
-        try { if (data && data.entries && data.entries.length > 0) toast.show('Teacher schedule loaded', 'success'); } catch(_) {}
+        try { if (data && data.entries && data.entries.length > 0) toast.show('Schedule loaded', 'success'); } catch(_) {}
       } catch (e) {
-        console.warn('TeacherPortal: failed to load schedule', e);
+        console.warn('MySchedule: failed to load schedule', e);
         setFetchedSessions(null);
-        // show toast
-        try { toast.show('Failed to load teacher schedule', 'error'); } catch(_){}
+        try { toast.show('Failed to load schedule', 'error'); } catch(_){}
       }
     };
     load();
@@ -55,7 +54,9 @@ export const TeacherPortal: React.FC = () => {
   }, [selectedTeacherId]);
 
   const selectedTeacher = teachers.find(f => f.id === selectedTeacherId) || null;
-  const teacherClasses = (fetchedSessions && fetchedSessions.length > 0) ? fetchedSessions : initialClasses.filter(c => (c.teacherId || c.facultyId) === selectedTeacherId);
+  const teacherSessions = (fetchedSessions && fetchedSessions.length > 0)
+    ? fetchedSessions
+    : sessions.filter(c => (c.teacherId || c.facultyId) === selectedTeacherId);
 
   return (
     <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
@@ -67,8 +68,8 @@ export const TeacherPortal: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-black rounded-lg uppercase tracking-widest">Teacher Active</span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID: ST_{selectedTeacherId ? String(selectedTeacherId).toUpperCase() : 'N/A'}</span>
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-black rounded-lg uppercase tracking-widest">Active</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID: {selectedTeacherId ? String(selectedTeacherId).toUpperCase() : 'N/A'}</span>
               </div>
               <h1 className="text-4xl font-black text-slate-900 tracking-tight">{selectedTeacher?.name}</h1>
               <p className="text-slate-500 font-medium">{selectedTeacher?.department} • Senior Lecturer</p>
@@ -96,7 +97,7 @@ export const TeacherPortal: React.FC = () => {
             </h2>
             
             <div className="space-y-4">
-              {teacherClasses.map(session => (
+              {teacherSessions.map(session => (
                 <div key={session.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all group cursor-pointer border-l-8 border-l-emerald-500">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -109,7 +110,7 @@ export const TeacherPortal: React.FC = () => {
                     </div>
                   </div>
                   
-                  <h3 className="text-xl font-black text-slate-800 mb-6 leading-tight">Advanced Data Structures & Implementation</h3>
+                  <h3 className="text-xl font-black text-slate-800 mb-6 leading-tight">Advanced Data Structures &amp; Implementation</h3>
                   
                   <div className="grid grid-cols-3 gap-6">
                     <div className="flex items-center gap-3 text-slate-500 bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
@@ -141,7 +142,7 @@ export const TeacherPortal: React.FC = () => {
 
           <div className="space-y-8">
             <div>
-              <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-6">Staff Directory</h2>
+              <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-6">Teachers</h2>
               <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
                     {(teachers || []).map(f => (
                   <button 
@@ -172,13 +173,13 @@ export const TeacherPortal: React.FC = () => {
               <div className="absolute top-0 right-0 p-4 opacity-10">
                 <User className="w-32 h-32 text-white" />
               </div>
-              <h3 className="text-white text-xl font-black mb-2 relative z-10">Teacher Support</h3>
-              <p className="text-emerald-400/80 text-sm font-medium mb-6 relative z-10 leading-relaxed">Need to request a swap or update your priority tier? Open the coordinator ticket system.</p>
+              <h3 className="text-white text-xl font-black mb-2 relative z-10">Support</h3>
+              <p className="text-emerald-400/80 text-sm font-medium mb-6 relative z-10 leading-relaxed">Need to request a swap or update your priority? Open a coordinator ticket.</p>
               <Popover trigger={<Button className="w-full bg-emerald-500 text-slate-900 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-emerald-400 transition-all relative z-10">Open Support</Button>}>
                 <div className="space-y-3">
                  <button className="w-full text-left px-3 py-2 rounded hover:bg-slate-50">Open Ticket</button>
                  <button className="w-full text-left px-3 py-2 rounded hover:bg-slate-50">Contact Coordinator</button>
-                 <button className="w-full text-left px-3 py-2 rounded hover:bg-slate-50">View Support Docs</button>
+                 <button className="w-full text-left px-3 py-2 rounded hover:bg-slate-50">View Docs</button>
                 </div>
               </Popover>
             </div>

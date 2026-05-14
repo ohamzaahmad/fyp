@@ -50,13 +50,13 @@ export const Dashboard: React.FC = () => {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-none">System Intelligence</span>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight mt-1">Analytics Core</h1>
+            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-none">Overview</span>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight mt-1">Dashboard</h1>
           </div>
           <div className="flex gap-3">
              <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">Real-time Optimization Active</span>
+                <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">Live</span>
              </div>
           </div>
         </div>
@@ -64,10 +64,10 @@ export const Dashboard: React.FC = () => {
         {/* Stats Grid */}
         <div className="grid grid-cols-4 gap-6 mb-8">
           {[
-            { label: 'System Efficiency', value: summary ? `${summary.systemEfficiency}%` : '—', icon: Zap, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+            { label: 'Efficiency', value: summary ? `${summary.systemEfficiency}%` : '—', icon: Zap, color: 'text-emerald-500', bg: 'bg-emerald-50' },
             { label: 'Room Utilization', value: summary ? `${summary.roomUtilization}%` : '—', icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-50' },
-            { label: 'Teacher Sat.', value: summary ? `${summary.facultySatisfaction}%` : '—', icon: Users, color: 'text-purple-500', bg: 'bg-purple-50' },
-            { label: 'Batch Continuity', value: summary ? `${summary.batchContinuity}%` : '—', icon: Scissors, color: 'text-amber-500', bg: 'bg-amber-50' },
+            { label: 'Teacher Satisfaction', value: summary ? `${summary.facultySatisfaction}%` : '—', icon: Users, color: 'text-purple-500', bg: 'bg-purple-50' },
+            { label: 'Schedule Continuity', value: summary ? `${summary.batchContinuity}%` : '—', icon: Scissors, color: 'text-amber-500', bg: 'bg-amber-50' },
           ].map((stat, i) => (
             <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition-transform hover:scale-[1.02]">
               <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:rotate-12", stat.bg)}>
@@ -83,7 +83,7 @@ export const Dashboard: React.FC = () => {
           {/* Main Chart */}
           <div className="col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Load Distribution (By Department)</h3>
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Load by Department</h3>
               <div className="flex gap-4">
                  <div className="flex items-center gap-1.5">
                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -134,8 +134,8 @@ export const Dashboard: React.FC = () => {
           {/* Conflict Live Feed */}
           <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-900/10 flex flex-col">
             <h3 className="text-sm font-black uppercase tracking-tight mb-6 flex items-center justify-between">
-              Live Constraint Feed
-              <span className="bg-rose-500 text-[8px] px-1.5 py-0.5 rounded ml-2 animate-pulse">Critical</span>
+              System Logs
+              <span className="bg-rose-500 text-[8px] px-1.5 py-0.5 rounded ml-2 animate-pulse">Live</span>
             </h3>
             <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
               {(feed && feed.length > 0 ? feed : logs).map((log: any, i: number) => (
@@ -168,8 +168,8 @@ export const Dashboard: React.FC = () => {
                  <Scissors className="w-40 h-40 text-white" />
               </div>
               <div className="relative z-10">
-                 <h2 className="text-3xl font-black text-white tracking-tight mb-2">Automated Batch Compression</h2>
-                 <p className="max-w-xs text-emerald-50 font-medium leading-relaxed mb-6">AI core found 8 sections with gaps over 90 minutes. Optimize batch continuity now?</p>
+                 <h2 className="text-3xl font-black text-white tracking-tight mb-2">Optimize Schedule</h2>
+                 <p className="max-w-xs text-emerald-50 font-medium leading-relaxed mb-6">Found sections with large time gaps. Run the optimizer to compact the timetable?</p>
                  <button onClick={async () => {
                     if (running) return;
                     setRunning(true);
@@ -187,7 +187,7 @@ export const Dashboard: React.FC = () => {
                     } finally {
                       setRunning(false);
                     }
-                 }} className="bg-white text-emerald-600 px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-emerald-900/20">{running ? 'Running...' : 'Execute Solver'}</button>
+                 }} className="bg-white text-emerald-600 px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-emerald-900/20">{running ? 'Running...' : 'Run Now'}</button>
               </div>
            </div>
 
@@ -196,7 +196,7 @@ export const Dashboard: React.FC = () => {
                  <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-500">?</div>
                  <div>
                     <h3 className="text-lg font-black text-slate-900 tracking-tight">Need Support?</h3>
-                    <p className="text-sm font-medium text-slate-400 lowercase">Open system documentation or API logs</p>
+                    <p className="text-sm font-medium text-slate-400">Browse help docs or check server status</p>
                  </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

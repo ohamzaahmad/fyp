@@ -123,3 +123,23 @@ class TimetableConstraint(models.Model):
 
     def __str__(self):
         return f"TimetableConstraint[{self.pk}] gap={self.gap_penalty} break={self.break_start}-{self.break_end}"
+
+class SystemConfiguration(models.Model):
+    app_name = models.CharField(max_length=100, default='NexusTime')
+    org_name = models.CharField(max_length=100, default='University of Agriculture')
+    academic_term = models.CharField(max_length=100, default='Fall 2026')
+    logo_url = models.URLField(max_length=500, null=True, blank=True, help_text='URL to the institution logo')
+    
+    break_start = models.TimeField(null=True, blank=True, help_text='Local time when a fixed break starts (HH:MM)')
+    break_end = models.TimeField(null=True, blank=True, help_text='Local time when a fixed break ends (HH:MM)')
+    max_daily_classes = models.IntegerField(default=6, help_text='Soft limit for classes per batch per day')
+    gap_penalty = models.FloatField(default=1.0, help_text='Weight for the gap-minimization objective')
+
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        verbose_name_plural = 'System Configuration'
+
+    def __str__(self):
+        return "Global System Configuration"

@@ -10,9 +10,8 @@
 
 import { useState, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar.tsx';
-import { Header } from './components/layout/Header.tsx';
 import TimetableGrid from './components/timetable/TimetableGrid.tsx';
-import { ControlRoom } from './components/control-room/ControlRoom.tsx';
+import { SuggestionsPage } from './components/suggestions/SuggestionsPage.tsx';
 import { AppState, Department, ClassSession } from './types.ts';
 import { DataProvider, useData } from './context/DataContext.tsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -20,8 +19,8 @@ import { Wand2, Loader2, CheckCircle2, Search, Command, Lock as LockIcon, Smartp
 import { MobileTimeline } from './components/mobile/MobileTimeline.tsx';
 import TimetablePrintView from './components/timetable/TimetablePrintView.tsx';
 import { Dashboard } from './components/timetable/Dashboard.tsx';
-import { TeacherPortal } from './components/control-room/TeacherPortal.tsx';
-import AdminConsole from './components/admin/AdminConsole.tsx';
+import { MySchedule } from './components/schedule/MySchedule.tsx';
+import ResourceManagement from './components/resources/ResourceManagement.tsx';
 
 import { timeToMinutes, checkConflicts, findMergeCandidates } from './services/timetableLogic.ts';
 
@@ -48,18 +47,7 @@ function AppContent() {
   const data = useData();
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  useEffect(() => {
-    // initialize header visibility from localStorage
-    const storedHeader = typeof window !== 'undefined' ? localStorage.getItem('nexus_header_visible') : null;
-    if (storedHeader !== null) setIsHeaderVisible(storedHeader === 'true');
 
-    const onSettings = (e: any) => {
-      if (e?.detail?.headerVisible !== undefined) setIsHeaderVisible(!!e.detail.headerVisible);
-    };
-    window.addEventListener('nexus:settings-updated', onSettings as EventListener);
-    return () => window.removeEventListener('nexus:settings-updated', onSettings as EventListener);
-  }, []);
 
   useEffect(() => {
     const openSettings = () => setState(prev => ({ ...prev, view: 'settings' }));
@@ -195,28 +183,18 @@ function AppContent() {
           collapsedBuildings={collapsedBuildings}
           onToggleBuilding={toggleBuilding}
           masterMap={masterMap}
-          isHeaderVisible={isHeaderVisible}
-          onToggleHeader={() => setIsHeaderVisible(v => !v)}
+          efficiency={87}
+          onGenerate={triggerOptimization}
         />
       )}
       
       <main className="flex-1 flex flex-col min-w-0">
         {!isMobile && (
         <>
-            {isHeaderVisible && (
-              <Header 
-                selectedDepts={state.selectedDepartments}
-                setSelectedDepts={(depts) => setState(prev => ({ ...prev, selectedDepartments: depts as number[] }))}
-                efficiency={87}
-              />
-            )}
+
 
             {/* Main Action Bar for Timetable */}
-                {state.view === 'settings' && (
-                  <ProtectedRoute allowedRoles={["ADMIN"]}>
-                    <Settings />
-                  </ProtectedRoute>
-                )}
+
             </>
         )}
 
@@ -242,24 +220,29 @@ function AppContent() {
                     />
                   </ProtectedRoute>
                 )}
-                {state.view === 'teachers' && (
+                {state.view === 'suggestions' && (
                   <ProtectedRoute allowedRoles={['ADMIN']}>
-                    <ControlRoom />
+                    <SuggestionsPage />
                   </ProtectedRoute>
                 )}
-                {state.view === 'admin' && (
+                {state.view === 'resources' && (
                   <ProtectedRoute allowedRoles={['ADMIN']}>
-                    <AdminConsole />
+                    <ResourceManagement />
                   </ProtectedRoute>
                 )}
-                {state.view === 'teacher' && (
+                {state.view === 'schedule' && (
                   <ProtectedRoute allowedRoles={['TEACHER', 'ADMIN']}>
-                    <TeacherPortal />
+                    <MySchedule />
                   </ProtectedRoute>
                 )}
                 {state.view === 'dashboard' && (
                   <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
                     <Dashboard />
+                  </ProtectedRoute>
+                )}
+                {state.view === 'settings' && (
+                  <ProtectedRoute allowedRoles={['ADMIN']}>
+                    <Settings />
                   </ProtectedRoute>
                 )}
                 {state.view === 'export' && (
@@ -384,7 +367,7 @@ function AppContent() {
                 </div>
                 
                 <h2 className="text-xl font-black text-slate-900 mb-2">Nexus Optimizer</h2>
-                <p className="text-slate-500 text-sm mb-6">Redistributing {state.classes.length} sessions across {(data?.initialClasses.length ?? 0) * 2} constraints.</p>
+                <p className="text-slate-500 text-sm mb-6">Redistributing {state.classes.length} sessions across {(data?.sessions.length ?? 0) * 2} constraints.</p>
                 
                 {/* Task Logs */}
                 <div className="w-full bg-slate-950 rounded-lg p-3 mb-6 font-mono text-[10px] text-emerald-400 h-24 overflow-hidden shadow-inner">

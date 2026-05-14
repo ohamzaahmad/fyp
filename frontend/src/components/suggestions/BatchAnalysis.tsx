@@ -10,10 +10,10 @@ import DropdownMenu from '../ui/DropdownMenu.tsx';
 import ConfirmDialog from '../ui/ConfirmDialog.tsx';
 import { Button } from '../ui/Button.tsx';
 
-export const GapAnalyzer: React.FC = () => {
+export const BatchAnalysis: React.FC = () => {
   const data = useData();
   const toast = useToast();
-  const availableBatches = Array.from(new Set((data?.initialClasses || []).map(c => c.batchId))).sort();
+  const availableBatches = Array.from(new Set((data?.sessions || []).map(c => c.batchId))).sort();
   const [batchId, setBatchId] = React.useState<string | null>(availableBatches.length > 0 ? availableBatches[0] : null);
   const [diagnostic, setDiagnostic] = React.useState<any | null>(null);
   const [diagLoading, setDiagLoading] = React.useState(false);
@@ -22,7 +22,7 @@ export const GapAnalyzer: React.FC = () => {
     if (!batchId && availableBatches.length > 0) setBatchId(availableBatches[0]);
   }, [availableBatches, batchId]);
 
-  const batchClasses = (data?.initialClasses || []).filter(c => c.batchId === batchId);
+  const batchClasses = (data?.sessions || []).filter(c => c.batchId === batchId);
 
   const runDiag = async (b?: string | null) => {
     const bid = b ?? batchId;
@@ -58,11 +58,10 @@ export const GapAnalyzer: React.FC = () => {
       <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-between mb-8">
           <div>
-            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Student Diagnostic</span>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Gap Analyzer: {batchId}</h1>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">Schedule Analysis <span className="text-slate-400 font-medium">/ {batchId}</span></h1>
             {diagnostic && (
               <div className="mt-2 text-sm text-slate-600">
-                Continuity: <strong className="text-emerald-700">{diagnostic.continuity}%</strong> • Sessions: <strong>{diagnostic.sessions}</strong> • Total Minutes: <strong>{diagnostic.total_minutes}</strong>
+                Continuity: <strong className="text-emerald-700">{diagnostic.continuity}%</strong> â€¢ Sessions: <strong>{diagnostic.sessions}</strong> â€¢ Total Minutes: <strong>{diagnostic.total_minutes}</strong>
               </div>
             )}
           </div>
@@ -71,9 +70,9 @@ export const GapAnalyzer: React.FC = () => {
               trigger={<button className="bg-white border rounded px-3 py-2 text-sm">{batchId ?? 'Select Batch'}</button>}
               items={availableBatches.map(b => ({ label: b, onSelect: () => { setBatchId(b); } }))}
             />
-            <Button onClick={() => runDiag()} variant="default" size="md">{diagLoading ? 'Running...' : 'Run Diagnostic'}</Button>
+            <Button onClick={() => runDiag()} variant="default" size="md">{diagLoading ? 'Running...' : 'Analyze'}</Button>
             <ConfirmDialog
-              trigger={<Button variant="outline" size="md" className="flex items-center gap-2"><Scissors className="w-4 h-4 text-emerald-400" />Compress Schedule</Button>}
+              trigger={<Button variant="outline" size="md" className="flex items-center gap-2"><Scissors className="w-4 h-4 text-emerald-400" />Compact Schedule</Button>}
               title="Compress Schedule"
               description="This will attempt to compress daily schedule gaps. Proceed?"
               onConfirm={() => { try { toast.show('Compression applied (simulated)', 'success'); } catch(_){} }}
@@ -89,8 +88,7 @@ export const GapAnalyzer: React.FC = () => {
                 <Clock className="w-4 h-4" />
                 Working Hours (08:00 - 18:00)
               </div>
-              <div className="h-4 w-[1px] bg-slate-200" />
-              <div className="text-xs font-bold text-slate-900">Total Wasted Time: <span className="text-rose-500">{totalWasted}m</span></div>
+              <div className="text-xs font-bold text-slate-900">Wasted Time: <span className="text-rose-500">{totalWasted}m</span></div>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5">
@@ -162,7 +160,7 @@ export const GapAnalyzer: React.FC = () => {
                 <ul className="space-y-2">
                   {diagnostic.gaps.map((g: any, idx: number) => (
                     <li key={idx} className="flex justify-between items-center">
-                      <div className="text-sm text-slate-700">{g.day} • {formatTime(g.start)} - {formatTime(g.end)} • <strong className="ml-2">{g.gapMinutes}m</strong></div>
+                      <div className="text-sm text-slate-700">{g.day} â€¢ {formatTime(g.start)} - {formatTime(g.end)} â€¢ <strong className="ml-2">{g.gapMinutes}m</strong></div>
                       <div className="flex gap-2">
                         <button onClick={() => toast.show(`Gap on ${g.day}: ${g.gapMinutes} minutes`, 'info')} className="text-xs px-2 py-1 rounded bg-slate-100">Details</button>
                         <button onClick={() => runDiag()} className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">Re-run</button>
@@ -221,3 +219,4 @@ export const GapAnalyzer: React.FC = () => {
     </div>
   );
 };
+

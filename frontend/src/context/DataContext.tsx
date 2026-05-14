@@ -5,15 +5,15 @@ import { useAuth } from './AuthContext.tsx';
 
 type DataContextType = {
   departments: Department[];
-  buildings: Department[]; // Alias for departments
   teachers: Teacher[];
-  faculty: Teacher[]; // Alias for teachers
   rooms: Room[];
   courses: Course[];
   batches: Batch[];
   assignments: CourseAssignment[];
   masterMap: MasterMap | null;
-  initialClasses: ClassSession[]; // Missing property requested by components
+  systemSettings: any;
+  /** All class sessions derived from the current timetable */
+  sessions: ClassSession[];
   isLoading: boolean;
   error: string | null;
   refreshAll: () => Promise<void>;
@@ -31,7 +31,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [batches, setBatches] = useState<Batch[]>([]);
   const [assignments, setAssignments] = useState<CourseAssignment[]>([]);
   const [masterMap, setMasterMap] = useState<MasterMap | null>(null);
-  const [initialClasses, setInitialClasses] = useState<ClassSession[]>([]);
+  const [sessions, setSessions] = useState<ClassSession[]>([]);
+  const [systemSettings, setSystemSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,14 +40,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     setError(null);
     try {
-      const [deps, facs, mm, rms, crs, bts, asgs] = await Promise.all([
+      const [deps, facs, mm, rms, crs, bts, asgs, settings] = await Promise.all([
         api.fetchDepartments(),
         api.fetchTeachers(),
         api.getMasterTimetable(),
         api.fetchRooms(),
         api.fetchCourses(),
         api.fetchBatches(),
-        api.fetchAssignments()
+        api.fetchAssignments(),
+        api.fetchSystemSettings()
       ]);
 
       setDepartments(deps || []);
@@ -56,22 +58,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCourses(crs || []);
       setBatches(bts || []);
       setAssignments(asgs || []);
+      setSystemSettings(settings || null);
 
-      // Derive initialClasses from masterMap if needed
+      // Derive sessions from timetable data
       if (mm) {
-        const classes: ClassSession[] = [];
+        const derived: ClassSession[] = [];
         Object.values(mm).forEach(dept => {
           Object.values(dept.floors).forEach(floor => {
             Object.values(floor.rooms).forEach(room => {
-              classes.push(...(room.sessions || []));
+              derived.push(...(room.sessions || []));
             });
           });
         });
-        setInitialClasses(classes);
+        setSessions(derived);
       }
     } catch (e: any) {
       setError(String(e));
-      console.warn('DataProvider: failed to load data', e);
+      console.warn('Failed to load application data', e);
     } finally {
       setIsLoading(false);
     }
@@ -92,22 +95,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const mm = await api.getMasterTimetable();
       setMasterMap(mm || null);
     } catch (e) {
-      console.warn('Failed to refresh master map', e);
+      console.warn('Failed to refresh timetable data', e);
     }
   }, []);
 
   return (
     <DataContext.Provider value={{ 
       departments, 
-      buildings: departments,
       teachers, 
-      faculty: teachers,
       rooms, 
       courses, 
       batches, 
       assignments, 
       masterMap, 
-      initialClasses,
+      sessions,
+      systemSettings,
       isLoading, 
       error, 
       refreshAll, 
