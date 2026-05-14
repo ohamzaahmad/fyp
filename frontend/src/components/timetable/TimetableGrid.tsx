@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { moveClass } from '../../services/api.ts';
+import { useToast } from '../ui/Toast.tsx';
 import { ClassSession, MasterMap } from '../../types.ts';
 import { TimeSlotCard } from './TimeSlotCard.tsx';
 import { cn } from '../../lib/utils.ts';
@@ -60,6 +62,63 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
     }));
   }, [masterMap, data?.masterMap]);
 
+  // Ensure we only fetch master map when this component is mounted and we don't have it yet.
+  React.useEffect(() => {
+    if (!data?.masterMap || Object.keys(data.masterMap).length === 0) {
+      data?.refreshMasterMap?.();
+    }
+  }, [data?.masterMap, data?.refreshMasterMap]);
+
+  const toast = useToast();
+
+  const handleDragEnd = async (event: any) => {
+    try {
+      const { active } = event;
+      if (!active) return;
+      const id = String(active.id);
+      const el = document.getElementById(id);
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      let target = document.elementFromPoint(centerX, centerY) as HTMLElement | null;
+      while (target && !target.dataset?.roomId) {
+        target = target.parentElement;
+      }
+
+      const newRoomId = target?.dataset?.roomId || undefined;
+      if (!target) {
+        // couldn't find a room - refresh data and exit
+        await data?.refreshMasterMap?.();
+        return;
+      }
+
+      const timelineRect = target.getBoundingClientRect();
+      const minutesFromStart = Math.round((rect.left - timelineRect.left) / pixelsPerMinute);
+      const totalMinutes = Math.max(START_HOUR * 60, START_HOUR * 60 + minutesFromStart);
+      const hh = Math.floor(totalMinutes / 60).toString().padStart(2, '0');
+      const mm = (totalMinutes % 60).toString().padStart(2, '0');
+      const newTime = `${hh}:${mm}`;
+
+      // Optimistic UI update
+      const updated = classes.map((c) => c.id === id ? { ...c, startTime: newTime, roomId: newRoomId } : c);
+      onClassesChange(updated);
+
+      // Persist to server
+      try {
+        await moveClass(id, newTime, newRoomId);
+        await data?.refreshMasterMap?.();
+      } catch (e: any) {
+        toast.show?.('Failed to move class: ' + (e?.message || String(e)), 'error');
+        // revert by refreshing from server
+        await data?.refreshMasterMap?.();
+      }
+    } catch (e) {
+      console.warn('Drag end handler failed', e);
+    }
+  };
+
   const [showDebug, setShowDebug] = useState(false);
 
   return (
@@ -114,7 +173,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
       ) : (
       <>
       <div className="flex-1 overflow-auto no-scrollbar scroll-smooth" id="grid-container">
-        <DndContext sensors={sensors}>
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
           <div className="min-w-max flex flex-col" style={{ width: `calc(${totalWidth}px + 140px)` }}>
             
             <div className="sticky top-0 z-30 flex bg-white border-b border-slate-200">
@@ -168,7 +227,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                                   <span className="text-[9px] text-slate-400 uppercase font-bold tracking-tight">Cap: {room.capacity}</span>
                                 </div>
  
-                                <div className="flex-1 relative bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px)] bg-[size:10%_100%]">
+                                <div data-room-id={room.id} className="flex-1 relative bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px)] bg-[size:10%_100%]">
                                   {roomSessions.map((session: any) => {
                                     const [h, m] = session.startTime.split(':').map(Number);
                                     const leftOffset = ((h - START_HOUR) * 60 + m) * pixelsPerMinute;

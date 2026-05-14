@@ -19,7 +19,10 @@ class RoomAdmin(admin.ModelAdmin):
 
 @admin.register(models.Course)
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ('course_id', 'name', 'department')
+    def department_list(self, obj):
+        return ', '.join([d.name for d in obj.department.all()])
+    department_list.short_description = 'Departments'
+    list_display = ('course_id', 'name', 'department_list')
 
 
 @admin.register(models.Batch)

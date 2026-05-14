@@ -2,6 +2,9 @@ export interface Department {
   id: number;
   code: string;
   name: string;
+  // optional runtime UI fields
+  floors?: number;
+  floorList?: number[];
 }
 
 export type Building = Department;
@@ -10,7 +13,7 @@ export interface Course {
   id: number;
   course_id: string;
   name: string;
-  department: number;
+  department: number[];
 }
 
 export interface Batch {

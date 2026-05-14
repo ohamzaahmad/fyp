@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import api, * as apiMethods from '../../services/api.ts';
+import api from '../../services/api.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { Department, Floor, Room } from '../../types.ts';
+import { useData } from '../../context/DataContext.tsx';
 
 const Classrooms: React.FC = () => {
   const [rooms, setRooms] = useState<any[]>([]);
@@ -12,18 +13,20 @@ const Classrooms: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const toast = useToast();
 
-  useEffect(() => { load(); }, []);
-
-  const load = async () => {
-    try {
-      const d = await apiMethods.fetchDepartments();
-      setDepartments(d || []);
-      const r = await apiMethods.fetchRooms();
-      setRooms(r || []);
-      const f = await apiMethods.fetchFloors();
-      setFloors(f || []);
-    } catch (e) { toast.show('Failed to load classrooms', 'error'); }
-  };
+  const data = useData();
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [d, r, f] = await Promise.all([data.fetchDepartments(), data.fetchRooms(), data.fetchFloors()]);
+        if (!mounted) return;
+        setDepartments(d || []);
+        setRooms(r || []);
+        setFloors(f || []);
+      } catch (e) { toast.show('Failed to load classrooms', 'error'); }
+    })();
+    return () => { mounted = false; };
+  }, [data.fetchDepartments, data.fetchRooms, data.fetchFloors]);
 
   const submit = async () => {
     try {
@@ -36,7 +39,8 @@ const Classrooms: React.FC = () => {
       }
       setForm({ name: '', capacity: 30, room_type: 'Lec', floor: 0 });
       setEditingId(null);
-      await load();
+      const refreshed = await data.fetchRooms();
+      setRooms(refreshed || []);
     } catch (e) { toast.show('Failed to save room', 'error'); }
   };
 
@@ -93,7 +97,7 @@ const Classrooms: React.FC = () => {
                 <td className="py-2 px-2">
                   <div className="flex gap-2">
                     <button onClick={() => { setEditingId(r.id); setForm({ name: r.name, capacity: r.capacity, room_type: r.room_type, floor: r.floor }); setSelectedDept(floor?.department); }} className="px-2 py-1 border rounded text-sm">Edit</button>
-                    <button onClick={() => { if(confirm('Delete?')) api.delete(`/rooms/${r.id}/`).then(load); }} className="px-2 py-1 border rounded text-sm text-rose-600">Delete</button>
+                    <button onClick={async () => { if(confirm('Delete?')) { await api.delete(`/rooms/${r.id}/`); const refreshed = await data.fetchRooms(); setRooms(refreshed || []); } }} className="px-2 py-1 border rounded text-sm text-rose-600">Delete</button>
                   </div>
                 </td>
               </tr>

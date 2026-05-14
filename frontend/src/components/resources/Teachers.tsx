@@ -1,9 +1,39 @@
 import React, { useEffect, useState } from 'react';
-import api, * as apiMethods from '../../services/api.ts';
+import api from '../../services/api.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { Teacher, Department, Course } from '../../types.ts';
+import { useData } from '../../context/DataContext.tsx';
 
-const initial: Partial<Teacher> = { name: '', email: '', department: 0, tier: 3, can_teach: [] };
+const initial: Partial<Teacher> = { name: '', email: '', department: 0, tier: 3, can_teach: [], requested_slots: [] };
+
+// Small tag-input for preferred times
+const TagInput: React.FC<{ value?: string[]; onChange: (v: string[]) => void; placeholder?: string }> = ({ value = [], onChange, placeholder }) => {
+  const [text, setText] = React.useState('');
+  const add = (t: string) => {
+    const v = t.trim();
+    if (!v) return;
+    if (value.includes(v)) return;
+    onChange([...value, v]);
+    setText('');
+  };
+  const remove = (idx: number) => onChange(value.filter((_, i) => i !== idx));
+  return (
+    <div>
+      <div className="flex gap-2 flex-wrap mb-2">
+        {value.map((t, i) => (
+          <span key={i} className="px-2 py-0.5 bg-slate-100 rounded text-xs flex items-center gap-2">
+            {t}
+            <button onClick={() => remove(i)} className="text-rose-500 text-xs">×</button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(text); } }} placeholder={placeholder || 'e.g. 08:00'} className="px-3 py-2 border rounded w-full" />
+        <button onClick={() => add(text)} className="px-3 py-2 bg-emerald-500 text-white rounded">Add</button>
+      </div>
+    </div>
+  );
+};
 
 const Teachers: React.FC = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -13,20 +43,22 @@ const Teachers: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const toast = useToast();
 
-  useEffect(() => { load(); }, []);
-
-  const load = async () => {
-    try {
-      const t = await apiMethods.fetchTeachers();
-      setTeachers(t || []);
-      const d = await apiMethods.fetchDepartments();
-      setDepartments(d || []);
-      const c = await apiMethods.fetchCourses();
-      setCourses(c || []);
-    } catch (e) {
-      toast.show('Failed to load data', 'error');
-    }
-  };
+  const data = useData();
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [t, d, c] = await Promise.all([data.fetchTeachers(), data.fetchDepartments(), data.fetchCourses()]);
+        if (!mounted) return;
+        setTeachers(t || []);
+        setDepartments(d || []);
+        setCourses(c || []);
+      } catch (e) {
+        toast.show('Failed to load data', 'error');
+      }
+    })();
+    return () => { mounted = false; };
+  }, [data.fetchTeachers, data.fetchDepartments, data.fetchCourses]);
 
   const submit = async () => {
     if (!form.name || !form.email || !form.department) {
@@ -35,15 +67,16 @@ const Teachers: React.FC = () => {
     }
     try {
       if (editingId) {
-        await apiMethods.updateTeacher(editingId, form);
+        await api.patch(`/faculties/${editingId}/`, form);
         toast.show('Teacher updated', 'success');
       } else {
-        await apiMethods.createTeacher(form);
+        await api.post('/faculties/', form);
         toast.show('Teacher created', 'success');
       }
       setForm(initial as Teacher);
       setEditingId(null);
-      await load();
+        const refreshed = await data.fetchTeachers();
+        setTeachers(refreshed || []);
     } catch (e) {
       toast.show('Failed to save teacher', 'error');
     }
@@ -52,9 +85,10 @@ const Teachers: React.FC = () => {
   const onDelete = async (id: number) => {
     if (!confirm('Delete this teacher?')) return;
     try {
-      await apiMethods.deleteTeacher(id);
+      await api.delete(`/faculties/${id}/`);
       toast.show('Teacher deleted', 'success');
-      await load();
+        const refreshed = await data.fetchTeachers();
+        setTeachers(refreshed || []);
     } catch (e) { toast.show('Failed to delete', 'error'); }
   };
 
@@ -86,13 +120,13 @@ const Teachers: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Department</label>
-                <select value={form.department || ''} onChange={(e) => setForm({ ...form, department: Number(e.target.value) })} className="w-full px-3 py-2 border rounded">
-                  <option value="">-- Select Dept --</option>
-                  {departments.map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                </select>
-              </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Department</label>
+                  <select value={form.department || ''} onChange={(e) => setForm({ ...form, department: Number(e.target.value) })} className="w-full px-3 py-2 border rounded">
+                    <option value="">-- Select Dept --</option>
+                    {departments.map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                  </select>
+                </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Tier / Seniority</label>
                 <select value={form.tier || 3} onChange={(e) => setForm({ ...form, tier: Number(e.target.value) })} className="w-full px-3 py-2 border rounded">
@@ -102,12 +136,22 @@ const Teachers: React.FC = () => {
                 </select>
               </div>
             </div>
+
+              <div className="mt-3">
+                <label className="block text-xs font-bold text-slate-500 mb-1">Preferred Times (press Enter or Add)</label>
+                <TagInput value={Array.isArray(form.requested_slots) ? form.requested_slots : []} onChange={(v) => setForm({ ...form, requested_slots: v } as Teacher)} placeholder="HH:MM" />
+              </div>
           </div>
 
           <div className="bg-white p-3 rounded border h-full">
             <label className="block text-xs font-bold text-slate-500 mb-2">Can Teach Courses (Select multiple)</label>
             <div className="max-h-48 overflow-y-auto space-y-1">
-              {courses.filter(c => !form.department || c.department === form.department).map(course => {
+              {courses.filter(c => {
+                if (!form.department) return true;
+                const deptField = (c as any).department;
+                if (Array.isArray(deptField)) return deptField.map(Number).includes(Number(form.department));
+                return Number(deptField) === Number(form.department);
+              }).map(course => {
                 const isSelected = Array.isArray(form.can_teach) && form.can_teach.map(Number).includes(course.id);
                 return (
                   <label key={course.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded cursor-pointer border border-transparent hover:border-slate-100 transition-colors">
@@ -160,6 +204,14 @@ const Teachers: React.FC = () => {
                     {(Array.isArray(t.can_teach) ? t.can_teach : []).length > 3 && (
                       <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs font-bold">+{t.can_teach.length - 3} more</span>
                     )}
+                  </div>
+                </td>
+                <td className="py-3 px-4">
+                  <div className="flex flex-wrap gap-1">
+                    {(Array.isArray(t.requested_slots) ? t.requested_slots : []).map((s, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">{s}</span>
+                    ))}
+                    {(!(Array.isArray(t.requested_slots) ? t.requested_slots : []).length) && <span className="text-xs text-slate-400">—</span>}
                   </div>
                 </td>
                 <td className="py-3 px-4 text-right">

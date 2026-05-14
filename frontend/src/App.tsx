@@ -36,8 +36,10 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute.tsx';
 
 function AppContent() {
   const { user, isAuthenticated, logout } = useAuth();
+  const storedView = (typeof window !== 'undefined') ? localStorage.getItem('nexus_view') : null;
+  const initialView = (storedView === 'dashboard' || storedView === 'timetable' || storedView === 'suggestions' || storedView === 'settings' || storedView === 'export' || storedView === 'schedule' || storedView === 'resources') ? storedView : 'dashboard';
   const [state, setState] = useState<AppState>({
-    view: 'dashboard',
+    view: initialView,
     zoomLevel: 1.0,
     selectedDepartments: [],
     classes: [],
@@ -54,6 +56,11 @@ function AppContent() {
     window.addEventListener('nexus:open-settings', openSettings as EventListener);
     return () => window.removeEventListener('nexus:open-settings', openSettings as EventListener);
   }, []);
+
+  // persist current view so browser refresh restores the same page
+  useEffect(() => {
+    try { localStorage.setItem('nexus_view', state.view); } catch (_) {}
+  }, [state.view]);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationStep, setOptimizationStep] = useState(0);
   const [optimizationLogs, setOptimizationLogs] = useState<string[]>([]);

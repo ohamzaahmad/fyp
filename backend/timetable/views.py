@@ -28,6 +28,24 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAdminUser()]
 
+    def create(self, request, *args, **kwargs):
+        # Allow creating a department with an initial number of floors by passing `floors` in payload
+        floors = request.data.get('floors')
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        department = serializer.save()
+        try:
+            n = int(floors) if floors is not None else 0
+        except Exception:
+            n = 0
+        if n and n > 0:
+            created = []
+            for num in range(1, n + 1):
+                f = models.Floor.objects.create(department=department, number=num)
+                created.append(f)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
 
 class FloorViewSet(viewsets.ModelViewSet):
     queryset = models.Floor.objects.all().order_by('department', 'number')

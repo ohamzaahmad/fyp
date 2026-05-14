@@ -15,8 +15,33 @@ const TIME_SLOTS = [
 
 export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes }) => {
   const data = useData();
+  React.useEffect(() => {
+    if (!data?.masterMap || Object.keys(data.masterMap).length === 0) {
+      data.refreshMasterMap?.();
+    }
+  }, [data.masterMap, data.refreshMasterMap]);
+  const sessions = data?.sessions || [];
   const buildingsSource = data?.masterMap || {};
   const buildings = Object.values(buildingsSource);
+
+  // Precompute slot start/end in minutes (24-hour). We treat slots before the 'Break' as morning/noon
+  // and slots after as afternoon (add 12 to hour when hour < 12).
+  const BREAK_INDEX = TIME_SLOTS.indexOf('Break');
+  const slotRanges = TIME_SLOTS.map((slot, idx) => {
+    if (slot === 'Break') return null;
+    const parts = slot.split('-').map(p => p.trim());
+    const start = parts[0];
+    const end = parts[1];
+    const parse = (t: string) => {
+      const [hStr, mStr] = t.split(':').map(s => s.trim());
+      let h = Number(hStr);
+      const m = Number(mStr || '0');
+      if (idx > BREAK_INDEX && h < 12) h += 12;
+      // special-case 12pm stays 12
+      return h * 60 + m;
+    };
+    return { start: parse(start), end: parse(end) };
+  });
 
   return (
     <div className="bg-white p-8 font-sans print:p-0 print:m-0" id="uaf-print-body">
@@ -62,13 +87,23 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
                     {idx === 0 && <td rowSpan={rooms.length} className="border border-black text-center font-bold rotate-180 [writing-mode:vertical-lr]">Mon</td>}
                     <td className="border border-black p-1 font-bold text-center bg-slate-50">
                       <div className="text-[8px] uppercase">{room.buildingName}</div>
-                      <div className="text-[10px] leading-tight mt-1">{room.name}</div>
+                      <div className="text-[9px] leading-tight mt-1">{room.floorNum ? `Floor ${room.floorNum} · ` : ''}{room.name}</div>
                     </td>
                     {TIME_SLOTS.map((slot, sIdx) => {
                       if (slot === 'Break') return <td key={sIdx} className="border border-black bg-slate-100 text-center font-black animate-pulse">BREAK</td>;
 
                       const startHour = slot.split(':')[0];
-                      const session = classes.find(c => c.roomId === room.id && c.startTime.startsWith(startHour.padStart(2, '0')));
+                      // Match session whose startTime falls within this slot's range
+                      const slotRange = slotRanges[sIdx];
+                      let session: any = null;
+                      if (slotRange) {
+                        session = sessions.find(c => {
+                          if (!c?.startTime) return false;
+                          const [sh, sm] = (c.startTime || '').split(':').map(Number);
+                          const minutes = (sh || 0) * 60 + (sm || 0);
+                          return String(c.roomId) === String(room.id) && minutes >= slotRange.start && minutes < slotRange.end;
+                        });
+                      }
                       const teacher = session ? data?.teachers.find((t: Teacher) => String(t.id) === String(session.teacherId || session.facultyId)) : null;
 
                       return (

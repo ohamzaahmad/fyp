@@ -18,6 +18,14 @@ type DataContextType = {
   error: string | null;
   refreshAll: () => Promise<void>;
   refreshMasterMap: () => Promise<void>;
+  fetchDepartments: () => Promise<Department[]>;
+  fetchTeachers: () => Promise<Teacher[]>;
+  fetchRooms: () => Promise<Room[]>;
+  fetchFloors: () => Promise<any[]>;
+  fetchCourses: () => Promise<Course[]>;
+  fetchBatches: () => Promise<Batch[]>;
+  fetchAssignments: () => Promise<CourseAssignment[]>;
+  fetchSystemSettings: () => Promise<any>;
 };
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -36,71 +44,138 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  // Per-resource fetchers. Components should call the fetch they need.
+  const fetchDepartments = useCallback(async () => {
     try {
-      const [deps, facs, mm, rms, crs, bts, asgs, settings] = await Promise.all([
-        api.fetchDepartments(),
-        api.fetchTeachers(),
-        api.getMasterTimetable(),
-        api.fetchRooms(),
-        api.fetchCourses(),
-        api.fetchBatches(),
-        api.fetchAssignments(),
-        api.fetchSystemSettings()
-      ]);
-
+      const deps = await api.fetchDepartments();
       setDepartments(deps || []);
-      setTeachers(facs || []);
-      setMasterMap(mm || null);
-      setRooms(rms || []);
-      setCourses(crs || []);
-      setBatches(bts || []);
-      setAssignments(asgs || []);
-      setSystemSettings(settings || null);
-
-      // Derive sessions from timetable data
-      if (mm) {
-        const derived: ClassSession[] = [];
-        Object.values(mm).forEach(dept => {
-          Object.values(dept.floors).forEach(floor => {
-            Object.values(floor.rooms).forEach(room => {
-              derived.push(...(room.sessions || []));
-            });
-          });
-        });
-        setSessions(derived);
-      }
-    } catch (e: any) {
-      setError(String(e));
-      console.warn('Failed to load application data', e);
-    } finally {
-      setIsLoading(false);
+      return deps || [];
+    } catch (e) {
+      console.warn('fetchDepartments failed', e);
+      return [];
     }
   }, []);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadData();
+  const fetchTeachers = useCallback(async () => {
+    try {
+      const facs = await api.fetchTeachers();
+      setTeachers(facs || []);
+      return facs || [];
+    } catch (e) {
+      console.warn('fetchTeachers failed', e);
+      return [];
     }
-  }, [isAuthenticated, loadData]);
+  }, []);
 
-  const refreshAll = useCallback(async () => {
-    await loadData();
-  }, [loadData]);
+  const fetchRooms = useCallback(async () => {
+    try {
+      const rms = await api.fetchRooms();
+      setRooms(rms || []);
+      return rms || [];
+    } catch (e) {
+      console.warn('fetchRooms failed', e);
+      return [];
+    }
+  }, []);
+
+  const fetchFloors = useCallback(async () => {
+    try {
+      const fls = await api.fetchFloors();
+      // floors are not stored globally but components can retrieve
+      return fls || [];
+    } catch (e) {
+      console.warn('fetchFloors failed', e);
+      return [];
+    }
+  }, []);
+
+  const fetchCourses = useCallback(async () => {
+    try {
+      const crs = await api.fetchCourses();
+      setCourses(crs || []);
+      return crs || [];
+    } catch (e) {
+      console.warn('fetchCourses failed', e);
+      return [];
+    }
+  }, []);
+
+  const fetchBatches = useCallback(async () => {
+    try {
+      const bts = await api.fetchBatches();
+      setBatches(bts || []);
+      return bts || [];
+    } catch (e) {
+      console.warn('fetchBatches failed', e);
+      return [];
+    }
+  }, []);
+
+  const fetchAssignments = useCallback(async () => {
+    try {
+      const asgs = await api.fetchAssignments();
+      setAssignments(asgs || []);
+      return asgs || [];
+    } catch (e) {
+      console.warn('fetchAssignments failed', e);
+      return [];
+    }
+  }, []);
+
+  const fetchSystemSettings = useCallback(async () => {
+    try {
+      const settings = await api.fetchSystemSettings();
+      setSystemSettings(settings || null);
+      return settings || null;
+    } catch (e) {
+      console.warn('fetchSystemSettings failed', e);
+      return null;
+    }
+  }, []);
 
   const refreshMasterMap = useCallback(async () => {
     try {
       const mm = await api.getMasterTimetable();
       setMasterMap(mm || null);
+      // derive sessions when master map is updated
+      if (mm) {
+        const derived: ClassSession[] = [];
+        Object.values(mm).forEach(dept => {
+          Object.values(dept.floors).forEach((floor: any) => {
+            Object.values((floor as any).rooms).forEach((room: any) => {
+              derived.push(...(room.sessions || []));
+            });
+          });
+        });
+        setSessions(derived);
+      } else {
+        setSessions([]);
+      }
     } catch (e) {
       console.warn('Failed to refresh timetable data', e);
     }
   }, []);
 
+  const refreshAll = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all([
+        fetchDepartments(),
+        fetchTeachers(),
+        refreshMasterMap(),
+        fetchRooms(),
+        fetchCourses(),
+        fetchBatches(),
+        fetchAssignments(),
+        fetchSystemSettings()
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchDepartments, fetchTeachers, refreshMasterMap, fetchRooms, fetchCourses, fetchBatches, fetchAssignments, fetchSystemSettings]);
+
   return (
-    <DataContext.Provider value={{ 
+    <DataContext.Provider value={React.useMemo(() => ({ 
       departments, 
       teachers, 
       rooms, 
@@ -113,8 +188,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLoading, 
       error, 
       refreshAll, 
-      refreshMasterMap 
-    }}>
+      refreshMasterMap,
+      fetchDepartments,
+      fetchTeachers,
+      fetchRooms,
+      fetchFloors,
+      fetchCourses,
+      fetchBatches,
+      fetchAssignments,
+      fetchSystemSettings
+    }), [
+      departments,
+      teachers,
+      rooms,
+      courses,
+      batches,
+      assignments,
+      masterMap,
+      sessions,
+      systemSettings,
+      isLoading,
+      error,
+      refreshAll,
+      refreshMasterMap,
+      fetchDepartments,
+      fetchTeachers,
+      fetchRooms,
+      fetchFloors,
+      fetchCourses,
+      fetchBatches,
+      fetchAssignments,
+      fetchSystemSettings
+    ])}>
       {children}
     </DataContext.Provider>
   );

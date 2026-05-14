@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import api, * as apiMethods from '../../services/api.ts';
+import api from '../../services/api.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { CourseAssignment, Course, Batch, Teacher } from '../../types.ts';
+import { useData } from '../../context/DataContext.tsx';
 
 const initial: Partial<CourseAssignment> = { course: 0, batch: 0, teacher: 0, weekly_hours: 3, type: 'T' };
 
@@ -14,22 +15,29 @@ const Assignments: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const toast = useToast();
 
-  useEffect(() => { load(); }, []);
+  const data = useData();
 
-  const load = async () => {
-    try {
-      const a = await apiMethods.fetchAssignments();
-      setAssignments(a || []);
-      const c = await apiMethods.fetchCourses();
-      setCourses(c || []);
-      const b = await apiMethods.fetchBatches();
-      setBatches(b || []);
-      const t = await apiMethods.fetchTeachers();
-      setTeachers(t || []);
-    } catch (e) {
-      toast.show('Failed to load data', 'error');
-    }
-  };
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [a, c, b, t] = await Promise.all([
+          data.fetchAssignments(),
+          data.fetchCourses(),
+          data.fetchBatches(),
+          data.fetchTeachers()
+        ]);
+        if (!mounted) return;
+        setAssignments(a || []);
+        setCourses(c || []);
+        setBatches(b || []);
+        setTeachers(t || []);
+      } catch (e) {
+        toast.show('Failed to load data', 'error');
+      }
+    })();
+    return () => { mounted = false; };
+  }, [data.fetchAssignments, data.fetchCourses, data.fetchBatches, data.fetchTeachers]);
 
   const submit = async () => {
     if (!form.course || !form.batch || !form.teacher) {
@@ -57,7 +65,8 @@ const Assignments: React.FC = () => {
       }
       setForm(initial as CourseAssignment);
       setEditingId(null);
-      await load();
+      const refreshed = await data.fetchAssignments();
+      setAssignments(refreshed || []);
     } catch (e) {
       toast.show('Failed to save assignment', 'error');
     }
@@ -68,7 +77,8 @@ const Assignments: React.FC = () => {
     try {
       await api.delete(`/assignments/${id}/`);
       toast.show('Assignment deleted', 'success');
-      await load();
+      const refreshed = await data.fetchAssignments();
+      setAssignments(refreshed || []);
     } catch (e) { toast.show('Failed to delete', 'error'); }
   };
 

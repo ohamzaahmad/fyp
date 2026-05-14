@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import api, * as apiMethods from '../../services/api.ts';
+import api from '../../services/api.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { Batch, Department, Course, Teacher } from '../../types.ts';
+import { useData } from '../../context/DataContext.tsx';
 
 const initial: Partial<Batch> = { name: '', department: 0, semester: 1, shift: 'M', courses: [] };
 
@@ -13,20 +14,27 @@ const Batches: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const toast = useToast();
 
-  useEffect(() => { load(); }, []);
+  const data = useData();
 
-  const load = async () => {
-    try {
-      const b = await apiMethods.fetchBatches();
-      setBatches(b || []);
-      const d = await apiMethods.fetchDepartments();
-      setDepartments(d || []);
-      const c = await apiMethods.fetchCourses();
-      setCourses(c || []);
-    } catch (e) {
-      toast.show('Failed to load batches or departments', 'error');
-    }
-  };
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [b, d, c] = await Promise.all([
+          data.fetchBatches(),
+          data.fetchDepartments(),
+          data.fetchCourses()
+        ]);
+        if (!mounted) return;
+        setBatches(b || []);
+        setDepartments(d || []);
+        setCourses(c || []);
+      } catch (e) {
+        toast.show('Failed to load batches or departments', 'error');
+      }
+    })();
+    return () => { mounted = false; };
+  }, [data.fetchBatches, data.fetchDepartments, data.fetchCourses]);
 
   const submit = async () => {
     try {
@@ -39,7 +47,8 @@ const Batches: React.FC = () => {
       }
       setForm(initial as Batch);
       setEditingId(null);
-      await load();
+      const refreshed = await data.fetchBatches();
+      setBatches(refreshed || []);
     } catch (e) {
       toast.show('Failed to save batch', 'error');
     }
@@ -50,7 +59,8 @@ const Batches: React.FC = () => {
     try {
       await api.delete(`/batches/${id}/`);
       toast.show('Batch deleted', 'success');
-      await load();
+      const refreshed = await data.fetchBatches();
+      setBatches(refreshed || []);
     } catch (e) { toast.show('Failed to delete', 'error'); }
   };
 
@@ -102,7 +112,12 @@ const Batches: React.FC = () => {
           <div className="bg-white p-3 rounded border h-full">
             <label className="block text-xs font-bold text-slate-500 mb-2">Courses (Select multiple)</label>
             <div className="max-h-48 overflow-y-auto space-y-1">
-              {courses.filter(c => !form.department || c.department === form.department).map(course => {
+              {courses.filter(c => {
+                if (!form.department) return true;
+                const deptField = (c as any).department;
+                if (Array.isArray(deptField)) return deptField.map(Number).includes(Number(form.department));
+                return Number(deptField) === Number(form.department);
+              }).map(course => {
                 const isSelected = Array.isArray(form.courses) && form.courses.map(Number).includes(course.id);
                 return (
                   <label key={course.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded cursor-pointer border border-transparent hover:border-slate-100 transition-colors">

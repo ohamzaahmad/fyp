@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import api, * as apiMethods from '../../services/api.ts';
+import api from '../../services/api.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { Course, Department } from '../../types.ts';
+import { useData } from '../../context/DataContext.tsx';
 
-const initial: Partial<Course> = { course_id: '', name: '', department: 0 };
+const initial: Partial<Course> = { course_id: '', name: '', department: [] as number[] };
 
 const Courses: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -12,35 +13,93 @@ const Courses: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const toast = useToast();
 
-  useEffect(() => { load(); }, []);
+  // Small searchable multi-select component
+  const SearchableMultiSelect: React.FC<{
+    options: Department[];
+    value: number[];
+    onChange: (v: number[]) => void;
+    placeholder?: string;
+  }> = ({ options, value, onChange, placeholder }) => {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
 
-  const load = async () => {
-    try {
-      const c = await apiMethods.fetchCourses();
-      setCourses(c || []);
-      const d = await apiMethods.fetchDepartments();
-      setDepartments(d || []);
-    } catch (e) {
-      toast.show('Failed to load courses or departments', 'error');
-    }
+    const filtered = options.filter(o => o.name.toLowerCase().includes(query.toLowerCase()));
+
+    const toggle = (id: number) => {
+      const arr = Array.isArray(value) ? [...value] : [];
+      const idx = arr.indexOf(id);
+      if (idx >= 0) arr.splice(idx, 1);
+      else arr.push(id);
+      onChange(arr);
+    };
+
+    return (
+      <div className="relative">
+        <div onClick={() => setOpen(!open)} className="w-full min-h-[44px] flex items-center gap-2 flex-wrap border rounded px-2 py-1 cursor-text" role="button">
+          {Array.isArray(value) && value.length > 0 ? (
+            value.map(v => {
+              const d = options.find(o => o.id === v);
+              return d ? <span key={v} className="px-2 py-0.5 bg-slate-100 rounded text-xs font-medium">{d.name}</span> : null;
+            })
+          ) : (
+            <span className="text-slate-400 text-sm">{placeholder || 'Select...'}</span>
+          )}
+        </div>
+
+        {open && (
+          <div className="absolute z-20 mt-1 w-full bg-white border rounded shadow-lg p-2">
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search..." className="w-full px-3 py-2 border rounded mb-2" />
+            <div className="max-h-48 overflow-y-auto">
+              {filtered.map(o => (
+                <label key={o.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded cursor-pointer">
+                  <input type="checkbox" checked={Array.isArray(value) && value.includes(o.id)} onChange={() => toggle(o.id)} className="w-4 h-4" />
+                  <span className="text-sm">{o.name}</span>
+                </label>
+              ))}
+              {filtered.length === 0 && <div className="text-sm text-slate-400 p-2">No departments</div>}
+            </div>
+            <div className="mt-2 text-right">
+              <button onClick={() => setOpen(false)} className="px-3 py-1 border rounded text-sm">Close</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
+  const data = useData();
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [c, d] = await Promise.all([data.fetchCourses(), data.fetchDepartments()]);
+        if (!mounted) return;
+        setCourses(c || []);
+        setDepartments(d || []);
+      } catch (e) {
+        toast.show('Failed to load courses or departments', 'error');
+      }
+    })();
+    return () => { mounted = false; };
+  }, [data.fetchCourses, data.fetchDepartments]);
+
   const submit = async () => {
-    if (!form.course_id || !form.name || !form.department) {
+    if (!form.course_id || !form.name || !(form.department && form.department.length > 0)) {
       toast.show('Please fill all fields', 'error');
       return;
     }
     try {
       if (editingId) {
-        await apiMethods.updateCourse(editingId, form);
+        await api.patch(`/courses/${editingId}/`, form);
         toast.show('Course updated', 'success');
       } else {
-        await apiMethods.createCourse(form);
+        await api.post('/courses/', form);
         toast.show('Course created', 'success');
       }
       setForm(initial as Course);
       setEditingId(null);
-      await load();
+      const refreshed = await data.fetchCourses();
+      setCourses(refreshed || []);
     } catch (e) {
       toast.show('Failed to save course', 'error');
     }
@@ -49,9 +108,11 @@ const Courses: React.FC = () => {
   const onDelete = async (id: number) => {
     if (!confirm('Delete this course?')) return;
     try {
-      await apiMethods.deleteCourse(id);
+      await api.delete(`/courses/${id}/`);
       toast.show('Course deleted', 'success');
-      await load();
+      // refresh list
+      const c = await data.fetchCourses();
+      setCourses(c || []);
     } catch (e) { toast.show('Failed to delete', 'error'); }
   };
 
@@ -71,11 +132,8 @@ const Courses: React.FC = () => {
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-500 mb-1">Department</label>
-          <select value={form.department || ''} onChange={(e) => setForm({ ...form, department: Number(e.target.value) })} className="w-full px-3 py-2 border rounded">
-            <option value="">-- Select Dept --</option>
-            {departments.map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
-          </select>
+          <label className="block text-xs font-bold text-slate-500 mb-1">Department(s)</label>
+          <SearchableMultiSelect options={departments} value={form.department || []} onChange={(v) => setForm({ ...form, department: v } as Course)} placeholder="Select departments" />
         </div>
 
         <div className="flex items-center gap-2">
@@ -99,7 +157,7 @@ const Courses: React.FC = () => {
               <tr key={c.id} className="border-b hover:bg-slate-50 transition-colors">
                 <td className="py-3 px-4 font-bold text-indigo-600">{c.course_id}</td>
                 <td className="py-3 px-4 font-medium">{c.name}</td>
-                <td className="py-3 px-4 text-slate-500">{departments.find(d => d.id === c.department)?.name || '—'}</td>
+                <td className="py-3 px-4 text-slate-500">{(c.department || []).map((did: number) => departments.find(d => d.id === did)?.name || '—').join(', ')}</td>
                 <td className="py-3 px-4 text-right">
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => { setEditingId(c.id); setForm(c); }} className="px-3 py-1 border rounded text-sm hover:bg-slate-100 font-medium">Edit</button>

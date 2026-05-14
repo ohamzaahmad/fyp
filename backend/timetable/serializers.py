@@ -26,6 +26,8 @@ class RoomSerializer(serializers.ModelSerializer):
 
 
 class CourseSerializer(serializers.ModelSerializer):
+    department = serializers.PrimaryKeyRelatedField(queryset=models.Department.objects.all(), many=True)
+
     class Meta:
         model = models.Course
         fields = '__all__'

@@ -44,6 +44,7 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
 
   return (
     <div
+      id={session.id}
       ref={setNodeRef}
       style={style}
       {...listeners}
