@@ -86,6 +86,10 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Media files (uploaded logos, etc.)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # DRF + JWT
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -98,3 +102,9 @@ REST_FRAMEWORK = {
 
 # CORS (dev defaults)
 CORS_ALLOW_ALL_ORIGINS = True
+
+# Analytics defaults (can be overridden via env or local settings)
+ANALYTICS_BUCKET_MINUTES = int(os.environ.get('ANALYTICS_BUCKET_MINUTES', 60))
+ANALYTICS_FEED_LIMIT = int(os.environ.get('ANALYTICS_FEED_LIMIT', 50))
+ANALYTICS_DAY_START_HOUR = int(os.environ.get('ANALYTICS_DAY_START_HOUR', 8))
+ANALYTICS_DAY_END_HOUR = int(os.environ.get('ANALYTICS_DAY_END_HOUR', 18))

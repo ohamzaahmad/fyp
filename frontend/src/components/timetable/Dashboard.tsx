@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { LayoutDashboard, Zap, TrendingUp, Users, Clock, AlertTriangle, CheckCircle2, Scissors } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { getAnalyticsSummary, getAnalyticsLogs, getAnalyticsLoadDistribution, getAnalyticsFeed, generateSchedule } from '../../services/api.ts';
+import { getAnalyticsSummaryWithParams, generateSchedule } from '../../services/api.ts';
+import { getStoredToken, refreshToken } from '../../services/authService.ts';
 import { useToast } from '../ui/Toast.tsx';
 
 const DATA = [
@@ -19,31 +20,216 @@ export const Dashboard: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loadData, setLoadData] = useState<any | null>(null);
   const [feed, setFeed] = useState<any[]>([]);
+  const [ackIds, setAckIds] = useState<string[]>([]);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [bucketMinutes, setBucketMinutes] = useState<number>(Number(process.env.VITE_ANALYTICS_BUCKET_MINUTES || 60));
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const toast = useToast();
+
+  const palette = ['#10b981', '#3b82f6', '#f97316', '#8b5cf6', '#ef4444', '#06b6d4', '#f59e0b', '#84cc16', '#e11d48', '#0ea5a4'];
+
+  const formatMinutesShort = (v: number | undefined) => {
+    const m = Math.round(Number(v || 0));
+    if (m >= 60) return `${Math.floor(m / 60)}h`;
+    return `${m}m`;
+  };
+
+  const formatMinutesFull = (v: number | undefined) => {
+    const m = Math.round(Number(v || 0));
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    if (h === 0) return `${mm}m`;
+    if (mm === 0) return `${h}h`;
+    return `${h}h ${mm}m`;
+  };
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       setLoading(true);
       try {
-        const [s, l, ld, f] = await Promise.all([getAnalyticsSummary(), getAnalyticsLogs(), getAnalyticsLoadDistribution(), getAnalyticsFeed()]);
+        const s = await getAnalyticsSummaryWithParams({ bucket_minutes: bucketMinutes });
         if (!mounted) return;
         setSummary(s || null);
-        setLogs(Array.isArray(l?.logs) ? l.logs : (l && l.logs ? l.logs : l?.logs || []));
-        setLoadData(ld || null);
-        setFeed(Array.isArray(f?.feed) ? f.feed : (f && f.feed ? f.feed : f?.feed || []));
+        setLogs(Array.isArray(s?.logs) ? s.logs : (s && s.logs ? s.logs : s?.logs || []));
+        setLoadData(s?.load_distribution || null);
+        const feedArray = Array.isArray(s?.feed) ? s.feed : (Array.isArray(s?.logs) ? s.logs : []);
+        setFeed(feedArray);
       } catch (e) {
         console.warn('Dashboard: failed to load analytics', e);
-        try { toast.show('Failed to load analytics', 'error'); } catch(_){}
+        try { toast.show('Failed to load analytics', 'error'); } catch(_){ }
       } finally {
         if (mounted) setLoading(false);
       }
     };
     load();
     return () => { mounted = false; };
-  }, []);
+  }, [bucketMinutes]);
+
+  // SSE: connect to analytics stream with token renewal and reconnect logic
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const POLL_INTERVAL_MS = 10000;
+    const RECONNECT_MAX_BACKOFF = 30000;
+    const SAFETY_MARGIN_MS = 30 * 1000; // refresh token 30s before expiry
+
+    let es: EventSource | null = null;
+    let pollId: number | null = null;
+    let refreshTimer: number | null = null;
+    let reconnectTimer: number | null = null;
+    let backoff = 1000;
+
+    const startPolling = () => {
+      if (pollId) return;
+      pollId = window.setInterval(async () => {
+        try {
+          const s = await getAnalyticsSummaryWithParams({ bucket_minutes: bucketMinutes });
+          setSummary(s || null);
+          setLoadData(s?.load_distribution || null);
+          const feedArray = Array.isArray(s?.feed) ? s.feed : (Array.isArray(s?.logs) ? s.logs : []);
+          setFeed(feedArray);
+        } catch (e) {
+          // ignore polling errors
+        }
+      }, POLL_INTERVAL_MS) as unknown as number;
+    };
+
+    const stopPolling = () => {
+      if (pollId) {
+        clearInterval(pollId);
+        pollId = null;
+      }
+    };
+
+    const clearTimers = () => {
+      if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    };
+
+    const buildStreamUrl = (token?: string) => token ? `/api/analytics/stream/?token=${encodeURIComponent(token)}` : '/api/analytics/stream/';
+
+    const scheduleTokenRefresh = (token?: string) => {
+      if (!token) return;
+      try {
+        const parts = token.split('.');
+        if (parts.length < 2) return;
+        const payload = JSON.parse(decodeURIComponent(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')).split('').map(function(c){
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join('')));
+        const exp = payload?.exp;
+        if (!exp) return;
+        const msUntilExpiry = (exp * 1000) - Date.now();
+        const when = Math.max(0, msUntilExpiry - SAFETY_MARGIN_MS);
+        if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+        if (when <= 0) {
+          // token already near expiry — refresh immediately
+          (async () => {
+            try {
+              await refreshToken();
+              const nt = getStoredToken();
+              // reconnect with new token
+              try { es?.close(); } catch(_){ }
+              openEventSource(nt);
+            } catch (e) {
+              // ignore
+            }
+          })();
+        } else {
+          refreshTimer = window.setTimeout(async () => {
+            try {
+              await refreshToken();
+              const nt = getStoredToken();
+              try { es?.close(); } catch(_){ }
+              openEventSource(nt);
+            } catch (e) {
+              // if refresh fails, fall back to polling
+              startPolling();
+            }
+          }, when) as unknown as number;
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
+    };
+
+    const openEventSource = (token?: string) => {
+      try {
+        // close previous
+        try { es?.close(); } catch (_) {}
+
+        const streamUrl = buildStreamUrl(token);
+        es = new EventSource(streamUrl);
+
+        es.onopen = () => {
+          stopPolling();
+          if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+          backoff = 1000;
+          scheduleTokenRefresh(token);
+        };
+
+        es.onmessage = async (evt) => {
+          try {
+            const data = JSON.parse(evt.data);
+            setFeed(prev => {
+              if (!data || !data.id) return prev;
+              const exists = prev.some((it: any) => String(it.id) === String(data.id));
+              if (exists) return prev;
+              const next = [...prev, data];
+              const limit = Number(process.env.VITE_ANALYTICS_FEED_LIMIT || 50);
+              return next.slice(-limit);
+            });
+            try {
+              const s = await getAnalyticsSummaryWithParams({ bucket_minutes: bucketMinutes });
+              setSummary(s || null);
+              setLoadData(s?.load_distribution || null);
+            } catch (e) {
+              // ignore summary refresh errors
+            }
+          } catch (err) {
+            // ignore malformed messages
+          }
+        };
+
+        es.onerror = async () => {
+          // Try to refresh token and reconnect once
+          try {
+            await refreshToken();
+            const nt = getStoredToken();
+            try { es?.close(); } catch(_){ }
+            openEventSource(nt);
+          } catch (e) {
+            // refresh failed — fall back to polling and schedule reconnect with backoff
+            startPolling();
+            if (!reconnectTimer) {
+              reconnectTimer = window.setTimeout(() => {
+                try { openEventSource(getStoredToken()); } catch (_) { startPolling(); }
+                reconnectTimer = null;
+              }, backoff) as unknown as number;
+              backoff = Math.min(backoff * 2, RECONNECT_MAX_BACKOFF);
+            }
+          }
+        };
+      } catch (e) {
+        // fallback to polling
+        startPolling();
+      }
+    };
+
+    // bootstrap
+    const initialToken = getStoredToken();
+    if (initialToken) {
+      openEventSource(initialToken);
+    } else {
+      startPolling();
+    }
+
+    return () => {
+      try { es?.close(); } catch (_) {}
+      stopPolling();
+      clearTimers();
+    };
+  }, [bucketMinutes]);
 
   return (
     <div className="flex-1 p-8 bg-slate-50 overflow-y-auto">
@@ -84,15 +270,34 @@ export const Dashboard: React.FC = () => {
           <div className="col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Load by Department</h3>
-              <div className="flex gap-4">
-                 <div className="flex items-center gap-1.5">
-                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                   <span className="text-[9px] font-bold text-slate-400 uppercase">CS</span>
-                 </div>
-                 <div className="flex items-center gap-1.5">
-                   <div className="w-2 h-2 rounded-full bg-blue-500" />
-                   <span className="text-[9px] font-bold text-slate-400 uppercase">Physics</span>
-                 </div>
+              <div className="flex gap-4 items-center">
+                {loadData && Array.isArray(loadData.series) && loadData.series.length > 0 ? (
+                  loadData.series.map((s: any, i: number) => (
+                    <div key={s.department} className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: palette[i % palette.length] }} />
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">{s.department}</span>
+                    </div>
+                  ))
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">CS</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Physics</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex items-center gap-2">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Bucket</label>
+                  <select value={bucketMinutes} onChange={e => setBucketMinutes(Number(e.target.value))} className="text-xs bg-slate-50 border border-slate-100 rounded px-2 py-1">
+                    <option value={30}>30m</option>
+                    <option value={60}>60m</option>
+                    <option value={120}>120m</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div className="h-64" style={{ minWidth: 0 }}>
@@ -107,25 +312,24 @@ export const Dashboard: React.FC = () => {
                     }) : DATA
                 }>
                   <defs>
-                    <linearGradient id="colorCs" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
+                    {(loadData?.series || []).map((s: any, idx: number) => (
+                      <linearGradient key={s.department} id={`grad-${idx}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={palette[idx % palette.length]} stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor={palette[idx % palette.length]} stopOpacity={0}/>
+                      </linearGradient>
+                    ))}
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} tickFormatter={formatMinutesShort} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }}
                     itemStyle={{ fontWeight: 'bold' }}
+                    formatter={(value: any) => formatMinutesFull(value)}
                   />
-                  {/* Render first two departments as examples; fallback to known keys */}
-                  {loadData && loadData.series && loadData.series[0] && (
-                    <Area type="monotone" dataKey={loadData.series[0].department} stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCs)" />
-                  )}
-                  {loadData && loadData.series && loadData.series[1] && (
-                    <Area type="monotone" dataKey={loadData.series[1].department} stroke="#3b82f6" strokeWidth={3} fill="transparent" />
-                  )}
+                  {(loadData?.series || []).map((s: any, idx: number) => (
+                    <Area key={s.department} type="monotone" dataKey={s.department} stroke={palette[idx % palette.length]} strokeWidth={3} fill={`url(#grad-${idx})`} fillOpacity={1} />
+                  ))}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -138,24 +342,48 @@ export const Dashboard: React.FC = () => {
               <span className="bg-rose-500 text-[8px] px-1.5 py-0.5 rounded ml-2 animate-pulse">Live</span>
             </h3>
             <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
-              {(feed && feed.length > 0 ? feed : logs).map((log: any, i: number) => (
-                <div key={i} className="flex gap-4 group">
-                  <span className="text-[9px] font-mono text-slate-500 pt-0.5">{log.time}</span>
-                  <div>
-                    <p className={cn(
-                      "text-[10px] font-bold tracking-tight",
-                      log.type === 'error' ? "text-rose-400" : 
-                      log.type === 'success' ? "text-emerald-400" :
-                      log.type === 'warning' ? "text-amber-400" : "text-blue-400"
-                    )}>
-                      {log.msg}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                       <span className="text-[8px] uppercase font-black text-slate-600 group-hover:text-slate-500 transition-colors">Action Required &rarr;</span>
+              {(feed && feed.length > 0 ? feed : logs).map((raw: any, i: number) => {
+                const id = String(raw?.id ?? raw?.pk ?? `log-${i}`);
+                const time = raw?.created_at ? new Date(raw.created_at).toLocaleString() : (raw?.time || '');
+                const message = raw?.message ?? raw?.msg ?? String(raw?.payload ?? raw ?? '');
+                const evType = (raw?.event_type || raw?.type || '').toLowerCase();
+                const type = evType.includes('fail') || evType.includes('error') ? 'error' : (evType.includes('fin') || evType.includes('complete') || evType.includes('enqueued') || evType.includes('start') ? 'success' : (evType.includes('warn') ? 'warning' : 'info'));
+                const payload = raw?.payload || {};
+                const acknowledged = ackIds.includes(id);
+                const expanded = expandedIds.includes(id);
+
+                const colorClass = type === 'error' ? 'text-rose-400' : type === 'success' ? 'text-emerald-400' : type === 'warning' ? 'text-amber-400' : 'text-blue-400';
+
+                return (
+                  <div key={id} className={cn('flex gap-4 items-start group', acknowledged ? 'opacity-40' : '')}>
+                    <div className="pt-0.5">
+                      <div className={cn('w-2 h-2 rounded-full mt-1', type === 'error' ? 'bg-rose-400' : type === 'success' ? 'bg-emerald-400' : type === 'warning' ? 'bg-amber-400' : 'bg-blue-400')} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className={cn('text-[10px] font-bold tracking-tight', colorClass)}>{message}</div>
+                          <div className="text-[9px] text-slate-500 font-mono mt-1">{time}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => {
+                            navigator.clipboard?.writeText(message).catch(()=>{});
+                          }} className="text-[10px] px-2 py-1 bg-slate-800/20 rounded text-slate-200 hover:bg-slate-800/30">Copy</button>
+                          <button onClick={() => {
+                            setExpandedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                          }} className="text-[10px] px-2 py-1 bg-slate-800/20 rounded text-slate-200 hover:bg-slate-800/30">Details</button>
+                          <button onClick={() => {
+                            setAckIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                          }} className="text-[10px] px-2 py-1 bg-slate-800/20 rounded text-slate-200 hover:bg-slate-800/30">{acknowledged ? 'Unack' : 'Ack'}</button>
+                        </div>
+                      </div>
+                      {expanded && (
+                        <pre className="mt-2 bg-slate-800 text-[11px] p-3 rounded text-slate-100 overflow-x-auto">{JSON.stringify(payload, null, 2)}</pre>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <button className="mt-8 w-full border border-slate-700 bg-slate-800/50 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-colors">Clear All Logs</button>
           </div>

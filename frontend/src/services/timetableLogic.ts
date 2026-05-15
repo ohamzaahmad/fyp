@@ -42,10 +42,12 @@ export const checkConflicts = (
     const targetDay = target.day_of_week || (target as any).dayOfWeek;
     const otherDay = other.day_of_week || (other as any).dayOfWeek;
     
-    // Only skip if both have a day defined and they don't match. 
-    // If one is missing (like during a preliminary edit preview before the day is set), 
-    // we should safely assume they might overlap unless we explicitly know they don't.
-    if (targetDay && otherDay && targetDay !== otherDay) return;
+    // Require both `day` fields to be present and equal before evaluating conflicts.
+    // This makes the behavior consistent with `findMergeCandidates()` which also
+    // requires explicit same-day matches. If either session lacks a day, we
+    // don't assume a possible overlap here — conflicts are only meaningful when
+    // both days are known.
+    if (!(targetDay && otherDay && targetDay === otherDay)) return;
 
     const otherStart = timeToMinutes(other.startTime);
     const otherEnd = otherStart + other.durationMinutes;
@@ -145,7 +147,9 @@ export const findMergeCandidates = (sessions: ClassSession[]) => {
       i !== j &&
       (s.facultyId === other.facultyId || s.teacherId === other.teacherId) &&
       s.subjectCode === other.subjectCode &&
-      s.startTime === other.startTime
+      s.startTime === other.startTime &&
+      // Require same day for merge candidates. If either session lacks a day, do not suggest merge.
+      !!(s.day_of_week && other.day_of_week && s.day_of_week === other.day_of_week)
     )
   );
 };

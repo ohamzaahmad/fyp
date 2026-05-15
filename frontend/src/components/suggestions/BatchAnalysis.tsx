@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils.ts';
 import { Clock, Scissors, Zap, AlertTriangle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { calculateGaps, timeToMinutes } from '../../services/timetableLogic.ts';
-import { getBatchDiagnostic } from '../../services/api.ts';
+import { getBatchDiagnostic, compactSchedule, downloadBatchTimetable } from '../../services/api.ts';
 import { useToast } from '../ui/Toast.tsx';
 import DropdownMenu from '../ui/DropdownMenu.tsx';
 import ConfirmDialog from '../ui/ConfirmDialog.tsx';
@@ -17,12 +17,30 @@ export const BatchAnalysis: React.FC = () => {
   const [batchId, setBatchId] = React.useState<string | null>(availableBatches.length > 0 ? availableBatches[0] : null);
   const [diagnostic, setDiagnostic] = React.useState<any | null>(null);
   const [diagLoading, setDiagLoading] = React.useState(false);
+  const [compactPreview, setCompactPreview] = React.useState<any | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
 
   React.useEffect(() => {
     if (!batchId && availableBatches.length > 0) setBatchId(availableBatches[0]);
   }, [availableBatches, batchId]);
 
   const batchClasses = (data?.sessions || []).filter(c => c.batchId === batchId);
+
+  // Days available for the selected batch (normalized strings)
+  const availableDays = Array.from(new Set(batchClasses.map(s => String(s.day_of_week || '').trim()).filter(Boolean))).sort();
+  const [selectedDay, setSelectedDay] = React.useState<string | null>(availableDays.length > 0 ? availableDays[0] : null);
+
+  React.useEffect(() => {
+    if (availableDays.length > 0) {
+      if (!selectedDay || !availableDays.includes(selectedDay)) setSelectedDay(availableDays[0]);
+    } else {
+      setSelectedDay(null);
+    }
+  }, [availableDays]);
+
+  React.useEffect(() => {
+    setCompactPreview(null);
+  }, [batchId, selectedDay]);
 
   const runDiag = async (b?: string | null) => {
     const bid = b ?? batchId;
@@ -39,11 +57,36 @@ export const BatchAnalysis: React.FC = () => {
       setDiagLoading(false);
     }
   };
+
+  const runPreview = async () => {
+    if (!batchId) return;
+    setPreviewLoading(true);
+    try {
+      const res = await compactSchedule(batchId, selectedDay, { mode: 'preview' });
+      setCompactPreview(res);
+      const count = Array.isArray(res?.proposals) ? res.proposals.length : 0;
+      try { toast.show(`Preview ready: ${count} proposed move${count === 1 ? '' : 's'}`, 'success'); } catch (_) {}
+    } catch (e: any) {
+      toast.show(`Preview failed: ${e?.message || String(e)}`, 'error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // Filter diagnostic gaps by selected day when diagnostic exists
+  const diagnosticGaps = React.useMemo(() => {
+    if (!diagnostic || !diagnostic.gaps) return [];
+    if (!selectedDay) return diagnostic.gaps;
+    return diagnostic.gaps.filter((g: any) => String(g.day).trim() === selectedDay);
+  }, [diagnostic, selectedDay]);
   const START_HOUR = 8;
   const END_HOUR = 18;
   const totalHours = END_HOUR - START_HOUR;
 
-  const gaps = calculateGaps(batchClasses);
+  // Use sessions for the selected day when computing gaps/metrics. If no day
+  // is selected, fall back to analyzing all sessions for the batch.
+  const batchDayClasses = selectedDay ? batchClasses.filter(s => String(s.day_of_week || '').trim() === selectedDay) : batchClasses;
+  const gaps = calculateGaps(batchDayClasses);
   const totalWasted = gaps.reduce((acc, g) => acc + g.duration, 0);
 
   const formatTime = (mins?: number) => {
@@ -61,7 +104,7 @@ export const BatchAnalysis: React.FC = () => {
             <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">Schedule Analysis <span className="text-slate-400 font-medium">/ {batchId}</span></h1>
             {diagnostic && (
               <div className="mt-2 text-sm text-slate-600">
-                Continuity: <strong className="text-emerald-700">{diagnostic.continuity}%</strong> â€¢ Sessions: <strong>{diagnostic.sessions}</strong> â€¢ Total Minutes: <strong>{diagnostic.total_minutes}</strong>
+                Continuity: <strong className="text-emerald-700">{diagnostic.continuity}%</strong> • Sessions: <strong>{diagnostic.sessions}</strong> • Total Minutes: <strong>{diagnostic.total_minutes}</strong>
               </div>
             )}
           </div>
@@ -70,15 +113,90 @@ export const BatchAnalysis: React.FC = () => {
               trigger={<button className="bg-white border rounded px-3 py-2 text-sm">{batchId ?? 'Select Batch'}</button>}
               items={availableBatches.map(b => ({ label: b, onSelect: () => { setBatchId(b); } }))}
             />
+            {availableDays.length > 0 && (
+              <DropdownMenu
+                trigger={<button className="bg-white border rounded px-3 py-2 text-sm">{selectedDay ?? 'All Days'}</button>}
+                items={[{ label: 'All Days', onSelect: () => setSelectedDay(null) }, ...availableDays.map(d => ({ label: d, onSelect: () => setSelectedDay(d) }))]}
+              />
+            )}
             <Button onClick={() => runDiag()} variant="default" size="md">{diagLoading ? 'Running...' : 'Analyze'}</Button>
+            <Button onClick={runPreview} variant="outline" size="md" disabled={!batchId || previewLoading} className="flex items-center gap-2">
+              <Zap className="w-4 h-4" />
+              {previewLoading ? 'Previewing...' : 'Preview Compact'}
+            </Button>
             <ConfirmDialog
               trigger={<Button variant="outline" size="md" className="flex items-center gap-2"><Scissors className="w-4 h-4 text-emerald-400" />Compact Schedule</Button>}
               title="Compress Schedule"
               description="This will attempt to compress daily schedule gaps. Proceed?"
-              onConfirm={() => { try { toast.show('Compression applied (simulated)', 'success'); } catch(_){} }}
+              onConfirm={async () => {
+                  try {
+                      const res = await compactSchedule(batchId as string, selectedDay, { mode: 'queue' });
+                      const taskId = res.task_id || res.taskId || res.task || res.taskId;
+                      try { toast.show(`Compression queued (task ${taskId || 'unknown'})`, 'success'); } catch(_){}
+                    // Refresh map to reflect any server-side changes
+                    try { await data?.refreshMasterMap?.(); } catch(_){ }
+                  } catch (e: any) {
+                    toast.show?.(`Compression failed: ${e?.message || String(e)}`, 'error');
+                  }
+                }}
             />
           </div>
         </div>
+
+        {compactPreview && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden"
+          >
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">Preview Proposals</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  {compactPreview.proposals?.length || 0} move{(compactPreview.proposals?.length || 0) === 1 ? '' : 's'} prepared for {selectedDay ?? 'all days'}.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCompactPreview(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+            <div className="p-5">
+              {compactPreview.proposals?.length ? (
+                <div className="space-y-3">
+                  {compactPreview.proposals.map((proposal: any) => {
+                    const session = batchDayClasses.find(s => String(s.id) === String(proposal.entry_pk));
+                    return (
+                      <div key={proposal.entry_pk} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div>
+                          <div className="text-sm font-bold text-slate-900">
+                            {session?.subjectCode || session?.courseName || `Entry ${proposal.entry_pk}`}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1">
+                            {selectedDay ?? 'All Days'} • {formatTime(proposal.orig_start)} → {formatTime(proposal.new_start)} • {proposal.duration}m
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] uppercase font-black tracking-wide text-slate-400">Shift</div>
+                          <div className="text-sm font-bold text-emerald-700">
+                            {Math.max(0, proposal.orig_start - proposal.new_start)}m earlier
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+                  No compression opportunities found for the selected scope.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Timeline Visualization */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden mb-8">
@@ -116,7 +234,7 @@ export const BatchAnalysis: React.FC = () => {
                {/* Sessions and Gaps */}
                <div className="absolute inset-y-0 left-0 right-0 flex items-center px-2">
                   <div className="relative w-full h-12">
-                     {batchClasses.map(session => {
+                     {batchDayClasses.map(session => {
                         const start = timeToMinutes(session.startTime);
                         const left = ((start - START_HOUR * 60) / (totalHours * 60)) * 100;
                         const width = (session.durationMinutes / (totalHours * 60)) * 100;
@@ -154,13 +272,13 @@ export const BatchAnalysis: React.FC = () => {
                </div>
             </div>
             
-            {diagnostic && diagnostic.gaps && diagnostic.gaps.length > 0 && (
+            {diagnostic && diagnosticGaps && diagnosticGaps.length > 0 && (
               <div className="bg-white p-4 border rounded mb-6">
                 <h3 className="font-bold mb-2">Detected Gaps</h3>
                 <ul className="space-y-2">
-                  {diagnostic.gaps.map((g: any, idx: number) => (
+                  {diagnosticGaps.map((g: any, idx: number) => (
                     <li key={idx} className="flex justify-between items-center">
-                      <div className="text-sm text-slate-700">{g.day} â€¢ {formatTime(g.start)} - {formatTime(g.end)} â€¢ <strong className="ml-2">{g.gapMinutes}m</strong></div>
+                      <div className="text-sm text-slate-700">{g.day} • {formatTime(g.start)} - {formatTime(g.end)} • <strong className="ml-2">{g.gapMinutes}m</strong></div>
                       <div className="flex gap-2">
                         <button onClick={() => toast.show(`Gap on ${g.day}: ${g.gapMinutes} minutes`, 'info')} className="text-xs px-2 py-1 rounded bg-slate-100">Details</button>
                         <button onClick={() => runDiag()} className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">Re-run</button>
@@ -192,9 +310,9 @@ export const BatchAnalysis: React.FC = () => {
             <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight mb-4">Efficiency Metrics</h3>
             <div className="space-y-4">
               {(() => {
-                const totalMins = batchClasses.reduce((a, s) => a + (s.durationMinutes || 50), 0);
-                const dayStart = batchClasses.length ? Math.min(...batchClasses.map(s => timeToMinutes(s.startTime))) : START_HOUR * 60;
-                const dayEnd = batchClasses.length ? Math.max(...batchClasses.map(s => timeToMinutes(s.startTime) + (s.durationMinutes || 50))) : END_HOUR * 60;
+                const totalMins = batchDayClasses.reduce((a, s) => a + (s.durationMinutes || 50), 0);
+                const dayStart = batchDayClasses.length ? Math.min(...batchDayClasses.map(s => timeToMinutes(s.startTime))) : START_HOUR * 60;
+                const dayEnd = batchDayClasses.length ? Math.max(...batchDayClasses.map(s => timeToMinutes(s.startTime) + (s.durationMinutes || 50))) : END_HOUR * 60;
                 const dayLen = dayEnd - dayStart;
                 const efficiency = dayLen > 0 ? Math.round((totalMins / dayLen) * 100) : 0;
                 const metrics = [
@@ -220,9 +338,29 @@ export const BatchAnalysis: React.FC = () => {
           <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-900/10">
             <h3 className="text-sm font-black uppercase tracking-tight mb-4">Export Timetable</h3>
             <p className="text-xs text-slate-400 mb-6 leading-relaxed">Generate a student-optimized PDF containing session summaries, teacher contact cards, and room directions.</p>
-            <div className="grid grid-cols-2 gap-3">
-              <button className="bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg text-[10px] font-bold uppercase transition-colors">Download PDF</button>
-              <button className="bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg text-[10px] font-bold uppercase transition-colors">Sync iCal</button>
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                onClick={async () => {
+                  if (!batchId) return;
+                  try {
+                    const blob = await downloadBatchTimetable(batchId);
+                    const url = window.URL.createObjectURL(blob);
+                    const anchor = document.createElement('a');
+                    anchor.href = url;
+                    anchor.download = `${batchId}-timetable.pdf`;
+                    document.body.appendChild(anchor);
+                    anchor.click();
+                    anchor.remove();
+                    window.URL.revokeObjectURL(url);
+                    try { toast.show('PDF download started', 'success'); } catch (_) {}
+                  } catch (e: any) {
+                    toast.show(`Download failed: ${e?.message || String(e)}`, 'error');
+                  }
+                }}
+                className="bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg text-[10px] font-bold uppercase transition-colors"
+              >
+                Download PDF
+              </button>
             </div>
           </div>
         </div>

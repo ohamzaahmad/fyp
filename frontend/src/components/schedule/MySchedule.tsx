@@ -6,64 +6,160 @@ import { getTeacherSchedule } from '../../services/api.ts';
 import { useToast } from '../ui/Toast.tsx';
 import Popover from '../ui/Popover.tsx';
 import { Button } from '../ui/Button.tsx';
+import { useAuth } from '../../context/AuthContext.tsx';
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const normalizeNumericId = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') return null;
+  const match = value.match(/(\d+)/);
+  if (!match) return null;
+  const parsed = parseInt(match[1], 10);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toMinutes = (time: string | undefined | null): number => {
+  if (!time) return 0;
+  const [h = '0', m = '0'] = time.split(':');
+  const hh = parseInt(h, 10);
+  const mm = parseInt(m, 10);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return 0;
+  return hh * 60 + mm;
+};
+
+const toTimeString = (mins: number): string => {
+  const safe = Math.max(0, mins);
+  const hh = Math.floor(safe / 60).toString().padStart(2, '0');
+  const mm = (safe % 60).toString().padStart(2, '0');
+  return `${hh}:${mm}`;
+};
+
+const formatDuration = (mins: number) => {
+  const safe = Math.max(0, Math.floor(mins));
+  const h = Math.floor(safe / 60);
+  const m = safe % 60;
+  if (h === 0 && m === 0) return '0h';
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+};
+
+const normalizeSession = (raw: any) => ({
+  id: String(raw?.id ?? `${raw?.day_of_week || raw?.dayOfWeek || 'Mon'}-${raw?.startTime || raw?.start_time || '00:00'}`),
+  day_of_week: raw?.day_of_week || raw?.dayOfWeek || 'Mon',
+  startTime: raw?.startTime || raw?.start_time || '00:00',
+  durationMinutes: Number(raw?.durationMinutes ?? raw?.duration_minutes ?? 0) || 0,
+  subjectCode: raw?.subjectCode || raw?.subject_code || '',
+  subjectName: raw?.subjectName || raw?.subject_name || '',
+  batchId: raw?.batchId || raw?.batch || raw?.batch_name || '',
+  roomId: raw?.roomId || raw?.room_id || raw?.room || '',
+  roomName: raw?.roomName || raw?.room_name || '',
+  teacherId: raw?.teacherId || raw?.teacher_id || raw?.facultyId || raw?.faculty_id || '',
+  facultyId: raw?.facultyId || raw?.faculty_id || raw?.teacherId || raw?.teacher_id || '',
+});
 
 export const MySchedule: React.FC = () => {
   const data = useData();
-  const { teachers = [], sessions = [] } = data;
-  const [selectedTeacherId, setSelectedTeacherId] = useState<any>(null);
+  const { user } = useAuth();
+  const { teachers = [], sessions = [], rooms = [] } = data;
+  const [selectedTeacherId, setSelectedTeacherId] = useState<number | null>(null);
   const [fetchedSessions, setFetchedSessions] = useState<any[] | null>(null);
-  const [selectedDay, setSelectedDay] = useState(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()] || 'Mon');
+  const [loadingTeacherSchedule, setLoadingTeacherSchedule] = useState(false);
+  const [selectedDay, setSelectedDay] = useState(DAY_NAMES[new Date().getDay()] || 'Mon');
   const DAYS = data?.systemSettings?.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const toast = useToast();
 
   useEffect(() => {
-    if (!selectedTeacherId && teachers && teachers.length > 0) {
-      setSelectedTeacherId(teachers[0].id);
+    if (selectedTeacherId) return;
+    if (!teachers || teachers.length === 0) return;
+
+    if (user?.role === 'TEACHER') {
+      const mine = teachers.find((t: any) => {
+        const teacherName = String(t?.name || '').trim().toLowerCase();
+        const userName = String(user?.name || '').trim().toLowerCase();
+        const teacherEmail = String(t?.email || '').trim().toLowerCase();
+        const userEmail = String(user?.email || '').trim().toLowerCase();
+        return (teacherName && teacherName === userName) || (teacherEmail && teacherEmail === userEmail);
+      });
+      if (mine?.id) {
+        setSelectedTeacherId(normalizeNumericId(mine.id));
+        return;
+      }
     }
-  }, [teachers, selectedTeacherId]);
+
+    setSelectedTeacherId(normalizeNumericId(teachers[0].id));
+  }, [teachers, selectedTeacherId, user]);
+
+  useEffect(() => {
+    if (DAYS.length === 0) return;
+    if (!DAYS.includes(selectedDay)) {
+      const today = DAY_NAMES[new Date().getDay()] || 'Mon';
+      setSelectedDay(DAYS.includes(today) ? today : DAYS[0]);
+    }
+  }, [DAYS, selectedDay]);
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      if (!selectedTeacherId) return setFetchedSessions(null);
+      if (!selectedTeacherId) {
+        setFetchedSessions(null);
+        return;
+      }
       try {
-        let pk: number | undefined;
-        if (typeof selectedTeacherId === 'number') pk = selectedTeacherId;
-        else if (typeof selectedTeacherId === 'string') {
-          const m = selectedTeacherId.match(/(\d+)/);
-          if (m) pk = parseInt(m[1], 10);
-        }
-        if (pk === undefined) return;
-        const data = await getTeacherSchedule(pk);
+        setLoadingTeacherSchedule(true);
+        const result = await getTeacherSchedule(selectedTeacherId);
         if (!mounted) return;
-        setFetchedSessions((data && data.entries) ? data.entries.map((e: any) => ({
-          ...e,
-          day_of_week: e.day_of_week || e.dayOfWeek,
-        })) : []);
+        const entries = Array.isArray(result?.entries) ? result.entries : [];
+        setFetchedSessions(entries.map(normalizeSession));
       } catch (e) {
         console.warn('MySchedule: failed to load schedule', e);
+        if (mounted) {
+          try { toast.show('Failed to load teacher schedule. Showing local data.', 'error'); } catch (_) {}
+        }
         setFetchedSessions(null);
+      } finally {
+        if (mounted) setLoadingTeacherSchedule(false);
       }
     };
     load();
     return () => { mounted = false; };
-  }, [selectedTeacherId]);
+  }, [selectedTeacherId, toast]);
 
-  const selectedTeacher = teachers.find(f => f.id === selectedTeacherId) || null;
+  const roomNameById = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    (rooms || []).forEach((r: any) => {
+      const rawId = String(r?.id ?? '');
+      if (!rawId) return;
+      map[rawId] = r?.name || rawId;
+      map[`room-${rawId}`] = r?.name || rawId;
+    });
+    return map;
+  }, [rooms]);
+
+  const selectedTeacher =
+    teachers.find((f: any) => normalizeNumericId(f.id) === selectedTeacherId) ||
+    null;
   
   const teacherSessions = React.useMemo(() => {
     const base = (fetchedSessions && fetchedSessions.length > 0)
       ? fetchedSessions
-      : sessions.filter(c => (c.teacherId || c.facultyId) === selectedTeacherId);
+      : (sessions || []).map(normalizeSession).filter((c: any) => {
+          const teacherPk = normalizeNumericId(c.teacherId) ?? normalizeNumericId(c.facultyId);
+          return teacherPk === selectedTeacherId;
+        });
     
     return base
-      .filter(s => s.day_of_week === selectedDay || (s as any).dayOfWeek === selectedDay)
-      .sort((a, b) => {
-         const t1 = (a.startTime || '00:00').split(':').reduce((acc: any, t: any) => acc * 60 + parseInt(t), 0);
-         const t2 = (b.startTime || '00:00').split(':').reduce((acc: any, t: any) => acc * 60 + parseInt(t), 0);
+      .filter((s: any) => s.day_of_week === selectedDay)
+      .sort((a: any, b: any) => {
+         const t1 = toMinutes(a.startTime);
+         const t2 = toMinutes(b.startTime);
          return t1 - t2;
       });
   }, [fetchedSessions, sessions, selectedTeacherId, selectedDay]);
+
+  const totalMinutesForDay = React.useMemo(
+    () => teacherSessions.reduce((acc: number, s: any) => acc + (s.durationMinutes || 0), 0),
+    [teacherSessions]
+  );
 
   return (
     <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
@@ -78,12 +174,12 @@ export const MySchedule: React.FC = () => {
                 <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-black rounded-lg uppercase tracking-widest">Active</span>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID: {selectedTeacherId ? String(selectedTeacherId).toUpperCase() : 'N/A'}</span>
               </div>
-              <h1 className="text-4xl font-black text-slate-900 tracking-tight">{selectedTeacher?.name}</h1>
-              <p className="text-slate-500 font-medium">{selectedTeacher?.department} • Senior Lecturer</p>
+              <h1 className="text-4xl font-black text-slate-900 tracking-tight">{selectedTeacher?.name || 'Select a Teacher'}</h1>
+              <p className="text-slate-500 font-medium">Department #{selectedTeacher?.department || 'N/A'} • Senior Lecturer</p>
             </div>
           </div>
           <div className="flex gap-4">
-            {DAYS.map(day => (
+            {DAYS.map((day: string) => (
               <button
                 key={day}
                 onClick={() => setSelectedDay(day)}
@@ -109,13 +205,26 @@ export const MySchedule: React.FC = () => {
                 <Calendar className="w-5 h-5 text-emerald-500" />
                 Sessions for {selectedDay}
               </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full">
-                {teacherSessions.length} Classes
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1 rounded-full">
+                {teacherSessions.length} Classes • {formatDuration(totalMinutesForDay)}
               </span>
             </h2>
             
             <div className="space-y-4">
-              {teacherSessions.length === 0 ? (
+              {loadingTeacherSchedule && (
+                <div className="bg-white p-8 rounded-3xl border border-slate-200 text-center text-slate-500 font-bold">
+                  Loading schedule...
+                </div>
+              )}
+
+              {!loadingTeacherSchedule && !selectedTeacherId && (
+                <div className="bg-white p-12 rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400">
+                  <Calendar className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p className="font-bold">No teacher selected</p>
+                </div>
+              )}
+
+              {!loadingTeacherSchedule && selectedTeacherId && teacherSessions.length === 0 ? (
                 <div className="bg-white p-12 rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400">
                   <Calendar className="w-12 h-12 mx-auto mb-4 opacity-20" />
                   <p className="font-bold">No sessions scheduled for {selectedDay}</p>
@@ -133,28 +242,28 @@ export const MySchedule: React.FC = () => {
                     </div>
                   </div>
                   
-                  <h3 className="text-xl font-black text-slate-800 mb-6 leading-tight">Advanced Data Structures &amp; Implementation</h3>
+                  <h3 className="text-xl font-black text-slate-800 mb-6 leading-tight">{session.subjectName || session.subjectCode || 'Untitled Course'}</h3>
                   
                   <div className="grid grid-cols-3 gap-6">
                     <div className="flex items-center gap-3 text-slate-500 bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
                        <Clock className="w-4 h-4 text-emerald-500" />
                        <div>
                          <p className="text-[8px] font-black uppercase text-slate-400 leading-none mb-1">Time</p>
-                         <p className="text-xs font-bold text-slate-700">{session.startTime}</p>
+                         <p className="text-xs font-bold text-slate-700">{session.startTime} - {toTimeString(toMinutes(session.startTime) + (session.durationMinutes || 0))}</p>
                        </div>
                     </div>
                     <div className="flex items-center gap-3 text-slate-500 bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
                        <MapPin className="w-4 h-4 text-emerald-500" />
                        <div>
                          <p className="text-[8px] font-black uppercase text-slate-400 leading-none mb-1">Room</p>
-                         <p className="text-xs font-bold text-slate-700">{(session.roomId || '').toUpperCase()}</p>
+                         <p className="text-xs font-bold text-slate-700">{session.roomName || roomNameById[String(session.roomId)] || String(session.roomId || '').toUpperCase() || 'TBA'}</p>
                        </div>
                     </div>
                     <div className="flex items-center gap-3 text-slate-500 bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
                        <BookOpen className="w-4 h-4 text-emerald-500" />
                        <div>
                          <p className="text-[8px] font-black uppercase text-slate-400 leading-none mb-1">Resources</p>
-                         <p className="text-xs font-bold text-slate-700">Digital Pack</p>
+                         <p className="text-xs font-bold text-slate-700">{session.durationMinutes || 0} mins</p>
                        </div>
                     </div>
                   </div>
@@ -170,23 +279,23 @@ export const MySchedule: React.FC = () => {
                     {(teachers || []).map(f => (
                   <button 
                     key={f.id}
-                    onClick={() => setSelectedTeacherId(f.id)}
+                    onClick={() => setSelectedTeacherId(normalizeNumericId(f.id))}
                     className={cn(
                       "w-full p-4 flex items-center gap-4 transition-colors border-b last:border-b-0",
-                      selectedTeacherId === f.id ? "bg-slate-900 text-white" : "hover:bg-slate-50"
+                      selectedTeacherId === normalizeNumericId(f.id) ? "bg-slate-900 text-white" : "hover:bg-slate-50"
                     )}
                   >
                     <div className={cn(
                       "w-10 h-10 rounded-xl flex items-center justify-center font-black",
-                      selectedTeacherId === f.id ? "bg-emerald-500 text-slate-900" : "bg-slate-100 text-slate-500"
+                      selectedTeacherId === normalizeNumericId(f.id) ? "bg-emerald-500 text-slate-900" : "bg-slate-100 text-slate-500"
                     )}>
                       {f.name.charAt(0)}
                     </div>
                     <div className="text-left flex-1 min-w-0">
                       <p className="font-bold text-sm truncate">{f.name}</p>
-                      <p className={cn("text-[10px] font-medium uppercase truncate", selectedTeacherId === f.id ? "text-slate-400" : "text-slate-400")}>{f.department}</p>
+                      <p className={cn("text-[10px] font-medium uppercase truncate", selectedTeacherId === normalizeNumericId(f.id) ? "text-slate-400" : "text-slate-400")}>Department #{f.department}</p>
                     </div>
-                    <ChevronRight className={cn("w-4 h-4", selectedTeacherId === f.id ? "text-emerald-500" : "text-slate-300")} />
+                    <ChevronRight className={cn("w-4 h-4", selectedTeacherId === normalizeNumericId(f.id) ? "text-emerald-500" : "text-slate-300")} />
                   </button>
                 ))}
               </div>

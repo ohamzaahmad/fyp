@@ -26,6 +26,7 @@ type DataContextType = {
   fetchBatches: () => Promise<Batch[]>;
   fetchAssignments: () => Promise<CourseAssignment[]>;
   fetchSystemSettings: () => Promise<any>;
+  updateSystemSettings: (payload: any) => Promise<any>;
 };
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -133,6 +134,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  const updateSystemSettings = useCallback(async (payload: any) => {
+    try {
+      const res = await api.updateSystemSettings(payload);
+      setSystemSettings(res || null);
+      return res;
+    } catch (e) {
+      console.warn('updateSystemSettings failed', e);
+      throw e;
+    }
+  }, []);
+
   const refreshMasterMap = useCallback(async () => {
     try {
       const mm = await api.getMasterTimetable();
@@ -180,6 +192,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [fetchDepartments, fetchTeachers, refreshMasterMap, fetchRooms, fetchCourses, fetchBatches, fetchAssignments, fetchSystemSettings]);
 
+  // Ensure system settings are available on initial load so they persist across refreshes
+  useEffect(() => {
+    // Fetch system settings but don't block the rest of the provider
+    fetchSystemSettings().catch((e) => console.warn('initial fetchSystemSettings failed', e));
+  }, [fetchSystemSettings]);
+
+  // When a user authenticates, load the full dataset so pages like Suggestions
+  // have the `sessions`, `teachers`, and other resources available.
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Fire-and-forget; components can trigger additional refreshes as needed
+      refreshAll().catch((e) => console.warn('refreshAll on auth failed', e));
+    }
+  }, [isAuthenticated, refreshAll]);
+
   return (
     <DataContext.Provider value={React.useMemo(() => ({ 
       departments, 
@@ -203,6 +230,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       fetchBatches,
       fetchAssignments,
       fetchSystemSettings
+      ,
+      updateSystemSettings
     }), [
       departments,
       teachers,
@@ -224,7 +253,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       fetchCourses,
       fetchBatches,
       fetchAssignments,
-      fetchSystemSettings
+      fetchSystemSettings,
+      updateSystemSettings
     ])}>
       {children}
     </DataContext.Provider>

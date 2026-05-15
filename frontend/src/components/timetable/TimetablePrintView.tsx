@@ -1,43 +1,20 @@
 import React from 'react';
 import { useData } from '../../context/DataContext.tsx';
 import { cn } from '../../lib/utils.ts';
-import { TIME_SLOTS } from '../../constants.ts';
+import { TIME_SLOTS, getSlotRanges, parseTime } from '../../constants.ts';
+import * as api from '../../services/api.ts';
 import { ClassSession, Teacher } from '../../types.ts';
 
 interface TimetablePrintViewProps {
   classes: ClassSession[];
 }
 
-const parseTime = (timeStr: string) => {
-  const [h, m] = timeStr.split(':').map(Number);
-  return h * 60 + m;
-};
-
-const getSlotRanges = () => {
-  // Convert TIME_SLOTS to start/end minutes for alignment
-  return TIME_SLOTS.map(slot => {
-    if (slot === 'Break') return null; // Handle break specially or skip
-    const parts = slot.split('-');
-    if (parts.length !== 2) return null;
-    
-    const parse = (t: string) => {
-      const [hStr, mStr] = t.trim().split(':');
-      let h = parseInt(hStr);
-      const m = parseInt(mStr || '0');
-      // If it's 1-7, assume PM (add 12)
-      if (h >= 1 && h <= 7) h += 12;
-      return h * 60 + m;
-    };
-    
-    return { start: parse(parts[0]), end: parse(parts[1]), label: slot };
-  });
-};
-
 
 
 export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes }) => {
   const data = useData();
   const DAYS = data?.systemSettings?.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const [unmatched, setUnmatched] = React.useState<any[]>([]);
 
   React.useEffect(() => {
     if (!data?.masterMap || Object.keys(data.masterMap).length === 0) {
@@ -48,6 +25,37 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
   const buildingsSource = data?.masterMap || {};
   const buildings = Object.values(buildingsSource);
   const slotRanges = React.useMemo(() => getSlotRanges(), []);
+
+  // Detect entries whose room is not present in masterMap and mark them as unmatched
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const entries: any[] = await api.fetchEntries();
+        const roomIds = new Set<string>();
+        Object.values(buildingsSource || {}).forEach((building: any) => {
+          Object.values(building.floors || {}).forEach((f: any) => {
+            Object.values(f.rooms || {}).forEach((r: any) => {
+              roomIds.add(String(r.id));
+            });
+          });
+        });
+
+        const unmatchedEntries = (entries || []).filter(e => {
+          const rid = String(e.room ?? e.room_id ?? e.roomId ?? e.roomId ?? '');
+          return rid && !roomIds.has(rid);
+        });
+
+        if (mounted) {
+          setUnmatched(unmatchedEntries);
+          if (unmatchedEntries.length > 0) console.warn('Unmatched sessions (room ids not found in masterMap):', unmatchedEntries);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch entries for unmatched detection', err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [buildingsSource]);
 
   const getSessionSlotInfo = (session: ClassSession) => {
     const startMin = parseTime(session.startTime);
@@ -83,6 +91,22 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
           tfoot { display: table-footer-group; }
         }
       `}} />
+
+      {unmatched.length > 0 && (
+        <div className="mb-6 p-3 border-2 border-red-600 bg-red-50 text-red-800">
+          <h2 className="font-bold text-lg">Unmatched Sessions ({unmatched.length})</h2>
+          <ul className="text-xs mt-2">
+            {unmatched.map((u, i) => (
+              <li key={i} className="mb-1">
+                <span className="font-semibold">Entry {u.id ?? u.pk ?? ''}</span>
+                {' — room: '}<span className="inline-block px-1 bg-red-200 rounded">{String(u.room ?? u.room_id ?? u.roomId)}</span>
+                {' — '}{u.start_time ?? u.startTime ?? u.start}
+                {' — '}{u.day_of_week ?? u.day ?? ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {buildings.map((building, bIdx) => {
         const rooms: any[] = [];

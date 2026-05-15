@@ -51,10 +51,11 @@ export const SuggestionsPage: React.FC = () => {
       const teacherId = (s.teacherId || s.facultyId || '').trim();
       const code = (s.subjectCode || '').trim().toUpperCase();
       const time = (s.startTime || '').trim();
-      
-      // We group by code, teacher, and time. 
-      // Note: In a multi-day system, we should also include s.day in the key.
-      const key = `${code}|${teacherId}|${time}`;
+      const day = (s.day_of_week || '').trim();
+
+      // Group by code, teacher, time and day — only sessions on the same day
+      // should be considered merge candidates.
+      const key = `${code}|${teacherId}|${time}|${day}`;
       
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(s);
@@ -178,7 +179,7 @@ export const SuggestionsPage: React.FC = () => {
     toast.show?.(`Re-verifying conflict ${conflict.sessionCode}...`, 'info');
     setTimeout(() => {
       // Re-run check conflicts logic...
-      toast.show?.(`Conflict still active. Manual intervention required.`, 'warning');
+      toast.show?.(`Conflict still active. Manual intervention required.`, 'error');
     }, 800);
   };
 

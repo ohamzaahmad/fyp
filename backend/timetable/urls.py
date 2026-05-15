@@ -11,16 +11,21 @@ from .views import (
     FacultyViewSet,
     CourseAssignmentViewSet,
     ScheduleEntryViewSet,
+    BatchDiagnosticView,
     SolverRunView,
     CurrentUserView,
     MasterMapView,
     TimetableMoveView,
     TimetableGenerateView,
     SystemConfigurationView,
+    LogoUploadView,
     AnalyticsSummaryView,
     BulkImportView,
     TimetableMergeView,
+    TimetableCompactView,
+    BatchTimetableExportView,
 )
+from .sse import analytics_sse_view
 
 router = routers.DefaultRouter()
 router.register(r'departments', DepartmentViewSet)
@@ -38,12 +43,17 @@ urlpatterns = [
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
     path('auth/me/', CurrentUserView.as_view(), name='current-user'),
+    path('batches/<str:batch_id>/diagnostic/', BatchDiagnosticView.as_view(), name='batch-diagnostic'),
+    path('batches/<str:batch_id>/export/', BatchTimetableExportView.as_view(), name='batch-export-pdf'),
     path('solver/generate/', SolverRunView.as_view(), name='solver-generate'),
     path('timetable/master-map/', MasterMapView.as_view(), name='timetable-master-map'),
     path('timetable/<str:entry_id>/move/', TimetableMoveView.as_view(), name='timetable-move'),
     path('timetable/generate/', TimetableGenerateView.as_view(), name='timetable-generate'),
     path('timetable/settings/', SystemConfigurationView.as_view(), name='timetable-settings'),
+    path('timetable/upload-logo/', LogoUploadView.as_view(), name='timetable-upload-logo'),
     path('analytics/summary/', AnalyticsSummaryView.as_view(), name='analytics-summary'),
+    path('analytics/stream/', analytics_sse_view, name='analytics-stream'),
+    path('timetable/compact/', TimetableCompactView.as_view(), name='timetable-compact'),
     path('timetable/bulk-upload/', BulkImportView.as_view(), name='timetable-bulk-upload'),
     path('timetable/merge/', TimetableMergeView.as_view(), name='timetable-merge'),
 ]

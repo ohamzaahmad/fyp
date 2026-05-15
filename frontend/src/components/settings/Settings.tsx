@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useData } from '../../context/DataContext.tsx';
 import { useAuth } from '../../context/AuthContext.tsx';
-import { updateSystemSettings } from '../../services/api.ts';
+import { uploadLogo } from '../../services/api.ts';
 import { Building2, Save, GraduationCap, Clock, Type, Image as ImageIcon } from 'lucide-react';
 
 export const Settings: React.FC = () => {
@@ -22,6 +22,9 @@ export const Settings: React.FC = () => {
     gap_penalty: 1.0,
     working_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as string[],
   });
+
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     // Load local theme
@@ -45,6 +48,7 @@ export const Settings: React.FC = () => {
         gap_penalty: data.systemSettings.gap_penalty || 1.0,
         working_days: data.systemSettings.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       });
+      setLogoPreview(data.systemSettings.logo_url || null);
     }
   }, [data.systemSettings]);
 
@@ -71,7 +75,20 @@ export const Settings: React.FC = () => {
         break_end: formData.break_end || null,
       };
 
-      await updateSystemSettings(payload);
+      // If a logo file was selected, upload it first and attach the returned URL
+      if (logoFile) {
+        try {
+          const uploadRes = await uploadLogo(logoFile);
+          if (uploadRes && uploadRes.logo_url) payload.logo_url = uploadRes.logo_url;
+        } catch (e) {
+          console.error('Logo upload failed', e);
+          alert('Logo upload failed. Settings were not saved.');
+          setSaving(false);
+          return;
+        }
+      }
+
+      await data.updateSystemSettings(payload);
       await data.refreshAll(); // Refresh to update the global context strings
     } catch (err) {
       console.error("Failed to save settings", err);
@@ -161,18 +178,36 @@ export const Settings: React.FC = () => {
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Logo URL</label>
-                <div className="relative">
-                  <ImageIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input 
-                    name="logo_url"
-                    value={formData.logo_url} 
-                    onChange={handleChange} 
-                    placeholder="https://example.com/logo.png"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" 
-                  />
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Logo</label>
+                <div className="flex items-center gap-4">
+                  <div className="w-24 h-24 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200">
+                    {logoPreview ? (
+                      <img src={logoPreview} alt="logo-preview" className="max-w-full max-h-full object-contain" />
+                    ) : (
+                      <div className="text-xs text-slate-400">No logo</div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null;
+                        if (f) {
+                          setLogoFile(f);
+                          try {
+                            const url = URL.createObjectURL(f);
+                            setLogoPreview(url);
+                          } catch (err) {
+                            setLogoPreview(null);
+                          }
+                        }
+                      }}
+                      className="text-sm"
+                    />
+                    <p className="text-xs text-slate-400 mt-2">Upload a PNG/SVG/JPG for the organization logo (used in headers and printouts).</p>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-400 mt-2">Public URL for the organization logo (Header/Login/Sidebar).</p>
               </div>
             </div>
           </div>

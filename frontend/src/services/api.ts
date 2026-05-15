@@ -220,12 +220,32 @@ export const getAnalyticsSummary = async (): Promise<any> => {
   return response.data;
 };
 
+export const getAnalyticsSummaryWithParams = async (params?: any): Promise<any> => {
+  const response = await api.get('/analytics/summary/', { params });
+  return response.data;
+};
+
 export const getAnalyticsLogs = async () => (await api.get('/analytics/summary/')).data?.logs || [];
 export const getAnalyticsLoadDistribution = async () => (await api.get('/analytics/summary/')).data?.load_distribution || {};
 export const getAnalyticsFeed = async () => (await api.get('/analytics/summary/')).data?.feed || [];
 
 export const getBatchDiagnostic = async (id: string | number) => {
-  const response = await api.get(`/batches/${id}/`);
+  const response = await api.get(`/batches/${id}/diagnostic/`);
+  return response.data;
+};
+
+export const downloadBatchTimetable = async (id: string | number) => {
+  const response = await api.get(`/batches/${id}/export/`, { responseType: 'blob' });
+  return response.data as Blob;
+};
+
+export const compactSchedule = async (
+  batchId: string | number,
+  day?: string | null,
+  options?: { mode?: 'queue' | 'preview' | 'apply' }
+) => {
+  const mode = options?.mode || 'queue';
+  const response = await api.post('/timetable/compact/', { batchId, day, mode });
   return response.data;
 };
 
@@ -261,5 +281,12 @@ export const fetchSystemSettings = async (): Promise<any> => {
 
 export const updateSystemSettings = async (payload: any): Promise<any> => {
   const response = await api.post('/timetable/settings/', payload);
+  return response.data;
+};
+
+export const uploadLogo = async (file: File): Promise<any> => {
+  const fd = new FormData();
+  fd.append('logo', file);
+  const response = await api.post('/timetable/upload-logo/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   return response.data;
 };

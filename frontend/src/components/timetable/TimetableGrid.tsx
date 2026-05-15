@@ -209,6 +209,32 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
     return { critical, warnings };
   }, [enrichedClasses]);
 
+  // Detect sessions whose roomId is not present in the masterMap (unmatched)
+  const masterRoomsSet = useMemo(() => {
+    const mm = data?.masterMap || masterMap || {};
+    const set = new Set<string>();
+    Object.values(mm).forEach((b: any) => {
+      Object.values(b.floors || {}).forEach((f: any) => {
+        Object.values(f.rooms || {}).forEach((r: any) => set.add(String(r.id)));
+      });
+    });
+    return set;
+  }, [data?.masterMap, masterMap]);
+
+  const unmatchedSessions = useMemo(() => {
+    if (!classes || classes.length === 0) return [];
+    return classes.filter(c => {
+      const rid = String((c as any).roomId ?? (c as any).room ?? (c as any).room_id ?? '');
+      return rid && !masterRoomsSet.has(rid);
+    });
+  }, [classes, masterRoomsSet]);
+
+  React.useEffect(() => {
+    if (unmatchedSessions.length > 0) {
+      console.warn('Unmatched sessions (room ids not found in masterMap):', unmatchedSessions);
+    }
+  }, [unmatchedSessions]);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 relative">
 
@@ -243,7 +269,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
         </button>
 
         <div className="flex items-center rounded-lg bg-slate-100 p-0.5 gap-0.5">
-          {DAYS.map(day => (
+          {DAYS.map((day: string) => (
             <button
               key={day}
               onClick={() => onDayChange(day)}
@@ -304,6 +330,27 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
           </div>
         )}
       </div>
+
+      {/* Unmatched sessions (rooms referenced by sessions but missing in masterMap) */}
+      {unmatchedSessions.length > 0 && (
+        <div className="px-4 py-2 bg-red-50 border-t border-b border-red-200 text-red-800">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-bold">Unmatched sessions: {unmatchedSessions.length}</div>
+            <button
+              onClick={() => console.log('Unmatched sessions:', unmatchedSessions)}
+              className="text-xs underline"
+            >
+              Log details
+            </button>
+          </div>
+          <div className="text-xs mt-1">
+            {unmatchedSessions.slice(0, 5).map((s: any) => (
+              <div key={s.id ?? s.pk} className="truncate">{s.id ?? s.pk} — {s.subjectCode || s.subject || ''} — room: {String(s.roomId ?? s.room ?? s.room_id)}</div>
+            ))}
+            {unmatchedSessions.length > 5 && <div className="text-xs">...and {unmatchedSessions.length - 5} more</div>}
+          </div>
+        </div>
+      )}
 
       {/* ── Debug view ───────────────────────────────────────────────────── */}
       <AnimatePresence mode="wait">
@@ -415,7 +462,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                                    (s: any) => (s.conflicts || []).some((c: any) => c.severity === 'Critical')
                                  );
                                 const roomHasMerge = roomSessions.some(
-                                  s => (s.conflicts || []).some(c => c.severity === 'Warning' && c.type === 'Room')
+                                  (s: any) => (s.conflicts || []).some((c: any) => c.severity === 'Warning' && c.type === 'Room')
                                 );
 
                                 return (
@@ -479,7 +526,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                                               return <div key={idx} style={{ width: `${w}px` }} />;
                                             }
                                             const w = (range.end - range.start) * pixelsPerMinute;
-                                            const slotHasSession = roomSessions.some(s => {
+                                            const slotHasSession = roomSessions.some((s: any) => {
                                               const sm = parseTime(s.startTime);
                                               return sm >= range.start && sm < range.end;
                                             });

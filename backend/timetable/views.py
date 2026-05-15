@@ -2,15 +2,21 @@ import csv
 import io
 import uuid
 import re
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import landscape, A4
+from reportlab.platypus import Table, TableStyle
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from datetime import datetime
+from datetime import datetime, time as dt_time
+from django.db import transaction
 from django.utils import timezone
 from django.db.models import Sum
+from django.conf import settings
 
 from . import models, serializers
 from .permissions import IsTeacherUser, IsAdminUser
@@ -65,11 +71,276 @@ class CourseViewSet(viewsets.ModelViewSet):
 class BatchViewSet(viewsets.ModelViewSet):
     queryset = models.Batch.objects.all().order_by('name')
     serializer_class = serializers.BatchSerializer
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Support retrieving batches by numeric PK or by name (case-insensitive).
+
+        The frontend currently passes batch names (e.g. `newbatch`) to `/batches/{id}/`.
+        By default DRF looks up by PK and will return 404 for a non-numeric value.
+        This method first tries to interpret the lookup as an integer PK and falls
+        back to a case-insensitive name lookup.
+        """
+        lookup_value = kwargs.get('pk')
+        if lookup_value is None:
+            return super().retrieve(request, *args, **kwargs)
+        # Try numeric PK first
+        instance = None
+        try:
+            pk = int(lookup_value)
+            instance = self.get_queryset().get(pk=pk)
+        except Exception:
+            # Fallback to name lookup (case-insensitive)
+            instance = self.get_queryset().filter(name__iexact=lookup_value).first()
+            if instance is None:
+                return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+
+class BatchDiagnosticView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_batch(self, batch_value):
+        try:
+            return models.Batch.objects.get(pk=int(batch_value))
+        except Exception:
+            return get_object_or_404(models.Batch, name__iexact=str(batch_value))
+
+    def get(self, request, batch_id, *args, **kwargs):
+        batch = self.get_batch(batch_id)
+        entries = (
+            models.ScheduleEntry.objects
+            .select_related('assignment__course', 'assignment__teacher', 'room')
+            .filter(assignment__batch=batch)
+            .order_by('day_of_week', 'start_time')
+        )
+
+        total_sessions = entries.count()
+        total_minutes = sum((e.duration_minutes or 0) for e in entries)
+
+        gaps = []
+        day_continuities = []
+        for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
+            day_entries = [e for e in entries if e.day_of_week == day]
+            if not day_entries:
+                continue
+            day_entries.sort(key=lambda e: e.start_time)
+
+            day_total = 0
+            day_windows = []
+            prev_end = None
+            for entry in day_entries:
+                start_m = entry.start_time.hour * 60 + entry.start_time.minute
+                end_m = start_m + (entry.duration_minutes or 0)
+                day_total += entry.duration_minutes or 0
+                day_windows.append((start_m, end_m))
+                if prev_end is not None and start_m > prev_end:
+                    gap_minutes = start_m - prev_end
+                    gaps.append({
+                        'day': day,
+                        'start': prev_end,
+                        'end': start_m,
+                        'gapMinutes': gap_minutes,
+                    })
+                prev_end = max(prev_end or 0, end_m)
+
+            if day_windows:
+                min_start = min(s for s, _ in day_windows)
+                max_end = max(e for _, e in day_windows)
+                span = max_end - min_start
+                if span > 0:
+                    day_continuities.append(round((day_total / span) * 100, 1))
+
+        continuity = round(sum(day_continuities) / len(day_continuities), 1) if day_continuities else 100.0
+
+        return Response({
+            'id': batch.pk,
+            'name': batch.name,
+            'semester': batch.semester,
+            'shift': batch.shift,
+            'department': batch.department_id,
+            'courses': list(batch.courses.values_list('id', flat=True)),
+            'continuity': continuity,
+            'sessions': total_sessions,
+            'total_minutes': total_minutes,
+            'gaps': gaps,
+        })
+
+
+class BatchTimetableExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_batch(self, batch_value):
+        try:
+            return models.Batch.objects.get(pk=int(batch_value))
+        except Exception:
+            return get_object_or_404(models.Batch, name__iexact=str(batch_value))
+
+    def _format_time(self, value):
+        if not value:
+            return ''
+        if hasattr(value, 'hour') and hasattr(value, 'minute'):
+            return f'{value.hour}:{value.minute:02d}'
+        return str(value)
+
+    def _build_pdf(self, batch):
+        from reportlab.pdfgen import canvas
+
+        buffer = io.BytesIO()
+        page_width, page_height = landscape(A4)
+        pdf = canvas.Canvas(buffer, pagesize=landscape(A4))
+
+        sessions = (
+            models.ScheduleEntry.objects
+            .select_related('assignment__course', 'assignment__teacher', 'room')
+            .filter(assignment__batch=batch)
+            .order_by('day_of_week', 'start_time')
+        )
+
+        grouped = {day: [] for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']}
+        for entry in sessions:
+            grouped.setdefault(entry.day_of_week, []).append(entry)
+
+        display_days = [day for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] if grouped.get(day)]
+
+        def day_label(day_code):
+            return {
+                'Mon': 'Monday',
+                'Tue': 'Tuesday',
+                'Wed': 'Wednesday',
+                'Thu': 'Thursday',
+                'Fri': 'Friday',
+                'Sat': 'Saturday',
+                'Sun': 'Sunday',
+            }.get(day_code, day_code)
+
+        def session_time(entry):
+            start = self._format_time(entry.start_time)
+            end_hour = entry.start_time.hour + ((entry.start_time.minute + entry.duration_minutes) // 60)
+            end_minute = (entry.start_time.minute + entry.duration_minutes) % 60
+            end = f'{end_hour}:{end_minute:02d}'
+            return f'{start} - {end}'
+
+        rows = []
+        rows.append(['Time Table', '', '', ''])
+        rows.append([f'Batch: {batch.name} | Semester {batch.semester} | Shift {batch.shift} | Department {batch.department.name}', '', '', ''])
+
+        for day in display_days:
+            rows.append([day_label(day), '', '', ''])
+            rows.append(['TIME', 'SUBJECT', 'PLACE', 'TEACHERS'])
+            for entry in grouped.get(day, []):
+                course = entry.assignment.course if entry.assignment else None
+                teacher = entry.assignment.teacher if entry.assignment else None
+                rows.append([
+                    session_time(entry),
+                    getattr(course, 'course_id', '') or getattr(course, 'name', ''),
+                    getattr(entry.room, 'name', '') if entry.room else '',
+                    getattr(teacher, 'name', '') if teacher else '',
+                ])
+
+        table = Table(rows, colWidths=[page_width * 0.18, page_width * 0.34, page_width * 0.24, page_width * 0.24], repeatRows=0)
+
+        style = TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('SPAN', (0, 1), (-1, 1)),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F81BD')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#D9E2F3')),
+            ('TEXTCOLOR', (0, 1), (-1, 1), colors.HexColor('#1F2937')),
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#D9E2F3')),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
+            ('GRID', (0, 1), (-1, -1), 0.4, colors.HexColor('#AAB7C4')),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ])
+
+        row_index = 2
+        for day in display_days:
+            style.add('SPAN', (0, row_index), (-1, row_index))
+            style.add('BACKGROUND', (0, row_index), (-1, row_index), colors.HexColor('#2F75B5'))
+            style.add('TEXTCOLOR', (0, row_index), (-1, row_index), colors.white)
+            style.add('FONTNAME', (0, row_index), (-1, row_index), 'Helvetica-Bold')
+            row_index += 1
+            style.add('BACKGROUND', (0, row_index), (-1, row_index), colors.HexColor('#EAF1FB'))
+            row_index += 1 + len(grouped.get(day, []))
+
+        table.setStyle(style)
+
+        available_width = page_width - 36
+        available_height = page_height - 72
+        font_size = 8
+        while font_size >= 5:
+            table.setStyle(TableStyle([('FONTSIZE', (0, 0), (-1, -1), font_size), ('LEADING', (0, 0), (-1, -1), font_size + 1)]))
+            width, height = table.wrap(available_width, available_height)
+            if height <= available_height:
+                break
+            font_size -= 1
+
+        pdf.setTitle(f'{batch.name} Timetable')
+        pdf.setAuthor('NexusTime')
+        pdf.drawString(18, page_height - 18, '')
+
+        width, height = table.wrap(available_width, available_height)
+        x = 18
+        y = page_height - 28 - height
+        table.drawOn(pdf, x, max(18, y))
+        pdf.showPage()
+        pdf.save()
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    def get(self, request, batch_id, *args, **kwargs):
+        batch = self.get_batch(batch_id)
+        pdf_bytes = self._build_pdf(batch)
+        filename = f'{batch.name}-timetable.pdf'
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 class FacultyViewSet(viewsets.ModelViewSet):
     queryset = models.Faculty.objects.all().order_by('name')
     serializer_class = serializers.FacultySerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        data = self.get_serializer(instance).data
+
+        entries_qs = (
+            models.ScheduleEntry.objects
+            .select_related('assignment__course', 'assignment__batch', 'room')
+            .filter(assignment__teacher=instance)
+            .order_by('day_of_week', 'start_time')
+        )
+
+        entries = []
+        for entry in entries_qs:
+            assign = entry.assignment
+            course = getattr(assign, 'course', None)
+            batch = getattr(assign, 'batch', None)
+            room = getattr(entry, 'room', None)
+            entries.append({
+                'id': f'entry-{entry.pk}',
+                'day_of_week': entry.day_of_week,
+                'startTime': entry.start_time.strftime('%H:%M') if entry.start_time else None,
+                'durationMinutes': entry.duration_minutes,
+                'subjectCode': getattr(course, 'course_id', '') if course else '',
+                'subjectName': getattr(course, 'name', '') if course else '',
+                'batchId': getattr(batch, 'name', '') if batch else '',
+                'roomId': f'room-{room.pk}' if room else None,
+                'roomName': getattr(room, 'name', '') if room else '',
+                'facultyId': f'faculty-{instance.pk}',
+                'teacherId': str(instance.pk),
+            })
+
+        data['entries'] = entries
+        return Response(data)
 
 
 class CourseAssignmentViewSet(viewsets.ModelViewSet):
@@ -80,6 +351,36 @@ class CourseAssignmentViewSet(viewsets.ModelViewSet):
 class ScheduleEntryViewSet(viewsets.ModelViewSet):
     queryset = models.ScheduleEntry.objects.all()
     serializer_class = serializers.ScheduleEntrySerializer
+    
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        try:
+            from .sse import emit_analytics_event
+            data = self.get_serializer(instance).data
+            emit_analytics_event('entry_created', f"Entry created {data.get('id')}", data)
+        except Exception:
+            pass
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        try:
+            from .sse import emit_analytics_event
+            data = self.get_serializer(instance).data
+            emit_analytics_event('entry_updated', f"Entry updated {data.get('id')}", data)
+        except Exception:
+            pass
+
+    def perform_destroy(self, instance):
+        try:
+            from .sse import emit_analytics_event
+            data = self.get_serializer(instance).data
+            instance.delete()
+            emit_analytics_event('entry_deleted', f"Entry deleted {data.get('id')}", data)
+        except Exception:
+            try:
+                instance.delete()
+            except Exception:
+                pass
 
 
 class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -103,11 +404,21 @@ class SolverRunView(APIView):
         try:
             from .tasks import generate_timetable
             task = generate_timetable.delay()
+            try:
+                from .sse import emit_analytics_event
+                emit_analytics_event('solver_enqueued', f'Solver enqueued: {task.id}', {'task_id': task.id})
+            except Exception:
+                pass
             return Response({'task_id': task.id}, status=status.HTTP_202_ACCEPTED)
         except Exception:
             try:
                 from solver.solver import solve_timetable
                 ok = solve_timetable()
+                try:
+                    from .sse import emit_analytics_event
+                    emit_analytics_event('solver_completed', 'Solver ran inline', {'success': ok})
+                except Exception:
+                    pass
                 return Response({'status': 'completed' if ok else 'failed'})
             except Exception as e:
                 return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -244,6 +555,11 @@ class TimetableMoveView(APIView):
             'isLocked': entry.is_locked,
             'isMerged': entry.is_merged,
         }
+        try:
+            from .sse import emit_analytics_event
+            emit_analytics_event('entry_moved', f"Entry moved {resp.get('id')}", resp)
+        except Exception:
+            pass
         return Response(resp)
 
 
@@ -276,11 +592,21 @@ class TimetableGenerateView(APIView):
         try:
             from .tasks import generate_timetable
             task = generate_timetable.delay(constraints)
+            try:
+                from .sse import emit_analytics_event
+                emit_analytics_event('timetable_generate_enqueued', f'Timetable generate enqueued: {task.id}', {'task_id': task.id})
+            except Exception:
+                pass
             return Response({'task_id': task.id}, status=status.HTTP_202_ACCEPTED)
         except Exception:
             try:
                 from solver.solver import solve_timetable
                 ok = solve_timetable(constraints=constraints)
+                try:
+                    from .sse import emit_analytics_event
+                    emit_analytics_event('timetable_generate_completed', 'Timetable generated inline', {'success': ok})
+                except Exception:
+                    pass
                 return Response({'status': 'completed' if ok else 'failed'})
             except Exception as e:
                 return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -349,6 +675,41 @@ class AnalyticsSummaryView(APIView):
 
             batch_continuity = round(sum(conts) / len(conts), 1) if conts else 100.0
 
+            # Build a load distribution measured in minutes of teaching per department per time-bucket
+            bucket_minutes = int(getattr(settings, 'ANALYTICS_BUCKET_MINUTES', 60))
+            day_start_hour = int(getattr(settings, 'ANALYTICS_DAY_START_HOUR', 8))
+            day_end_hour = int(getattr(settings, 'ANALYTICS_DAY_END_HOUR', 18))
+            slot_starts = list(range(day_start_hour * 60, (day_end_hour + 1) * 60, bucket_minutes))
+            times = [f"{(m // 60):02d}:{(m % 60):02d}" for m in slot_starts]
+
+            dept_objs = list(models.Department.objects.all())
+            series = []
+            dept_index_map = {}
+            for di, d in enumerate(dept_objs):
+                dept_index_map[d.pk] = di
+                series.append({'department': d.name, 'values': [0 for _ in times]})
+
+            for e in entries_list:
+                try:
+                    room = e.room
+                    if not room or not room.floor or not room.floor.department:
+                        continue
+                    dept_pk = room.floor.department.pk
+                    idx = dept_index_map.get(dept_pk)
+                    if idx is None:
+                        continue
+
+                    session_start = (e.start_time.hour * 60 + e.start_time.minute) if e.start_time else 0
+                    session_end = session_start + (e.duration_minutes or 0)
+
+                    for si, slot_start in enumerate(slot_starts):
+                        slot_end = slot_start + bucket_minutes
+                        overlap = max(0, min(session_end, slot_end) - max(session_start, slot_start))
+                        if overlap > 0:
+                            series[idx]['values'][si] += overlap
+                except Exception:
+                    continue
+
             return Response({
                 'systemEfficiency': system_efficiency,
                 'roomUtilization': room_utilization,
@@ -357,6 +718,12 @@ class AnalyticsSummaryView(APIView):
                 'totalSessions': total_sessions,
                 'totalMinutes': total_minutes,
                 'lastOptimized': None,
+                'load_distribution': {
+                    'times': times,
+                    'series': series,
+                },
+                'logs': [],
+                'feed': [],
             })
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -437,6 +804,99 @@ class TimetableConstraintsView(APIView):
         ser.is_valid(raise_exception=True)
         obj = ser.save(created_by=request.user)
         return Response(serializers.TimetableConstraintSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+
+class LogoUploadView(APIView):
+    """Accepts a multipart upload for the system logo and returns a public URL."""
+    permission_classes = [IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        logo = request.FILES.get('logo')
+        if not logo:
+            return Response({'error': 'no logo file provided'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            from django.core.files.storage import default_storage
+            from django.core.files.base import ContentFile
+            import os
+
+            save_path = os.path.join('logos', logo.name)
+            path = default_storage.save(save_path, ContentFile(logo.read()))
+            # Build an absolute URL so Django REST URLField validation accepts it
+            rel_url = default_storage.url(path)
+            abs_url = request.build_absolute_uri(rel_url)
+            return Response({'logo_url': abs_url})
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TimetableCompactView(APIView):
+    """Persist a request to compact/compress a batch's schedule (audit log + SSE emit).
+
+    This endpoint records the user's request and reports the number of affected entries.
+    The actual compression algorithm is intentionally left out; an orchestrator or
+    background worker could perform structural changes later.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        batch_ident = request.data.get('batchId') or request.data.get('batch') or request.data.get('batch_id')
+        day = request.data.get('day') or None
+        if not batch_ident:
+            return Response({'error': 'batchId is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        batch = None
+        try:
+            batch = models.Batch.objects.get(pk=int(batch_ident))
+        except Exception:
+            batch = models.Batch.objects.filter(name=batch_ident).first()
+
+        if not batch:
+            return Response({'error': 'batch not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Support three modes: preview (compute plan), queue (enqueue background task), apply (deprecated: apply inline)
+        mode = (request.data.get('mode') or request.query_params.get('mode') or 'queue').lower()
+        from .tasks import _compute_compact_plan, compact_schedule_task
+
+        # Compute a proposal so we can report affected entries without performing heavy work inline
+        plan = _compute_compact_plan(batch.pk, day)
+
+        if mode == 'preview':
+            return Response({'status': 'preview', **plan})
+
+        # Queue background task (recommended)
+        if mode in ('queue', 'queued', 'background'):
+            try:
+                task = compact_schedule_task.delay(batch.pk, day, request.user.pk if request.user and request.user.is_authenticated else None)
+                # Persist audit record for enqueue
+                try:
+                    models.AnalyticsFeed.objects.create(
+                        event_type='compact_schedule_queued',
+                        message=f'Compact schedule enqueued for batch {batch.name}',
+                        payload={'batch_id': batch.pk, 'batch_name': batch.name, 'day': day, 'task_id': str(task.id)},
+                        user=request.user if request.user.is_authenticated else None,
+                    )
+                except Exception:
+                    pass
+                try:
+                    from .sse import emit_analytics_event
+                    emit_analytics_event('compact_enqueued', f'Compact enqueued for {batch.name}', {'task_id': task.id, 'batch': batch.pk}, user_id=(request.user.pk if request.user and request.user.is_authenticated else None))
+                except Exception:
+                    pass
+                return Response({'status': 'queued', 'task_id': task.id, 'affected_entries': plan.get('affected_entries', 0)}, status=status.HTTP_202_ACCEPTED)
+            except Exception as e:
+                return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Fallback: apply inline (keep for compatibility, but not recommended)
+        if mode == 'apply':
+            # apply inline by delegating to the background task synchronously
+            try:
+                result = compact_schedule_task.apply(args=(batch.pk, day, request.user.pk if request.user and request.user.is_authenticated else None))
+                return Response({'status': 'completed', **(result.get() or {})})
+            except Exception as e:
+                return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({'error': 'invalid mode'}, status=status.HTTP_400_BAD_REQUEST)
 
 class SystemConfigurationView(APIView):
     def get_permissions(self):
