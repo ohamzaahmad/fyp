@@ -239,7 +239,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 relative">
 
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-200 bg-white">
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-200 bg-white" data-tour="timetable-toolbar">
         <div className="flex items-center gap-1.5 mr-auto">
           <div className="w-2 h-2 rounded-full bg-emerald-500" />
           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Timetable Grid</span>
@@ -268,7 +268,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
           Refresh
         </button>
 
-        <div className="flex items-center rounded-lg bg-slate-100 p-0.5 gap-0.5">
+        <div className="flex items-center rounded-lg bg-slate-100 p-0.5 gap-0.5" data-tour="timetable-day-selector">
           {DAYS.map((day: string) => (
             <button
               key={day}
@@ -286,7 +286,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
         <div className="w-px h-6 bg-slate-200 mx-2" />
 
         {/* View toggle */}
-        <div className="flex items-center rounded-lg bg-slate-100 p-0.5 gap-0.5">
+        <div className="flex items-center rounded-lg bg-slate-100 p-0.5 gap-0.5" data-tour="timetable-visual-toggle">
           <button
             onClick={() => setShowDebug(false)}
             className={cn(
@@ -430,6 +430,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
                           {/* Dept header */}
                           <div
                             onClick={() => onToggleBuilding(dept.id)}
+                            data-tour="timetable-room-row"
                             className="h-9 bg-slate-100 border-b border-slate-200 flex items-center px-4 sticky left-0 z-20 cursor-pointer hover:bg-slate-200/70 transition-colors"
                           >
                             <div className="flex items-center gap-2">
@@ -641,7 +642,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
             </div>
 
             {/* ── Zoom controls ──────────────────────────────────────── */}
-            <div className="absolute bottom-6 right-6 flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-3 py-2 shadow-lg z-40">
+            <div className="absolute bottom-6 right-6 flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-3 py-2 shadow-lg z-40" data-tour="timetable-zoom-controls">
               <button
                 onClick={() => onZoomChange(Math.max(0.5, zoomLevel - 0.1))}
                 className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"

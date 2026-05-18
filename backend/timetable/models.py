@@ -73,6 +73,48 @@ class Faculty(models.Model):
         db_table = 'timetable_teacher'
 
 
+class ScheduleAdjustmentRequest(models.Model):
+    STATUS_PENDING = 'PENDING'
+    STATUS_APPROVED = 'APPROVED'
+    STATUS_REJECTED = 'REJECTED'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_REJECTED, 'Rejected'),
+    ]
+
+    teacher = models.ForeignKey(Faculty, on_delete=models.CASCADE, related_name='adjustment_requests')
+    related_entry = models.ForeignKey('ScheduleEntry', on_delete=models.SET_NULL, null=True, blank=True, related_name='adjustment_requests')
+    requested_day = models.CharField(
+        max_length=3,
+        choices=[
+            ('Mon', 'Monday'),
+            ('Tue', 'Tuesday'),
+            ('Wed', 'Wednesday'),
+            ('Thu', 'Thursday'),
+            ('Fri', 'Friday'),
+            ('Sat', 'Saturday'),
+            ('Sun', 'Sunday'),
+        ],
+        blank=True,
+        default=''
+    )
+    requested_time = models.TimeField(null=True, blank=True)
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    admin_notes = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_adjustment_requests')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.teacher.name} adjustment request [{self.status}]'
+
+
 class CourseAssignment(models.Model):
     TYPE_CHOICES = [('T', 'Theory'), ('P', 'Practical')]
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='assignments')

@@ -45,6 +45,39 @@ class FacultySerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ScheduleAdjustmentRequestSerializer(serializers.ModelSerializer):
+    teacher_name = serializers.ReadOnlyField(source='teacher.name')
+    teacher_email = serializers.ReadOnlyField(source='teacher.email')
+    course_code = serializers.ReadOnlyField(source='related_entry.assignment.course.course_id')
+    course_name = serializers.ReadOnlyField(source='related_entry.assignment.course.name')
+    batch_name = serializers.ReadOnlyField(source='related_entry.assignment.batch.name')
+    room_name = serializers.ReadOnlyField(source='related_entry.room.name')
+
+    class Meta:
+        model = models.ScheduleAdjustmentRequest
+        fields = [
+            'id',
+            'teacher',
+            'teacher_name',
+            'teacher_email',
+            'related_entry',
+            'course_code',
+            'course_name',
+            'batch_name',
+            'room_name',
+            'requested_day',
+            'requested_time',
+            'reason',
+            'status',
+            'admin_notes',
+            'reviewed_by',
+            'reviewed_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'teacher', 'teacher_name', 'teacher_email', 'status', 'admin_notes', 'reviewed_by', 'reviewed_at', 'created_at', 'updated_at']
+
+
 class CourseAssignmentSerializer(serializers.ModelSerializer):
     course_name = serializers.ReadOnlyField(source='course.name')
     batch_name = serializers.ReadOnlyField(source='batch.name')

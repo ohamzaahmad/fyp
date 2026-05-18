@@ -278,6 +278,31 @@ export const getTeacherSchedule = async (id: string | number) => {
   return response.data;
 };
 
+export const downloadTeacherSchedule = async (id: string | number) => {
+  const response = await api.get(`/faculties/${id}/export/`, { responseType: 'blob' });
+  return response.data as Blob;
+};
+
+export const fetchAdjustmentRequests = async (): Promise<any[]> => {
+  const response = await api.get('/adjustment-requests/');
+  return response.data;
+};
+
+export const createAdjustmentRequest = async (payload: {
+  related_entry?: number | null;
+  requested_day?: string;
+  requested_time?: string | null;
+  reason: string;
+}) => {
+  const response = await api.post('/adjustment-requests/', payload);
+  return response.data;
+};
+
+export const updateAdjustmentRequest = async (id: number | string, payload: Partial<{ status: string; admin_notes: string }>) => {
+  const response = await api.patch(`/adjustment-requests/${id}/`, payload);
+  return response.data;
+};
+
 export const setApiBaseUrl = (url: string) => {
   localStorage.setItem('nexus_api_base', url);
   window.location.reload();

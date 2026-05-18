@@ -47,7 +47,7 @@ export const BatchObserver: React.FC = () => {
     setSessions(out.sort((a, b) => a.startTime.localeCompare(b.startTime)));
   }, [map, selected]);
 
-  const runDiagnostic = async () => {
+  const downloadTimetable = async () => {
     if (!selected) return;
     setLoading(true);
     try {

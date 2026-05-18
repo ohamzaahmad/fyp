@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/layout/Sidebar.tsx';
 import TimetableGrid from './components/timetable/TimetableGrid.tsx';
 import { SuggestionsPage } from './components/suggestions/SuggestionsPage.tsx';
@@ -33,6 +33,7 @@ import { ToastProvider } from './components/ui/Toast.tsx';
 import Settings from './components/settings/Settings.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
 import { ProtectedRoute } from './components/auth/ProtectedRoute.tsx';
+import AppTourGuide from './components/layout/AppTourGuide.tsx';
 
 function AppContent() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -50,6 +51,7 @@ function AppContent() {
   const data = useData();
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const lastRoleRef = useRef<string | null>(null);
 
 
   useEffect(() => {
@@ -92,6 +94,21 @@ function AppContent() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      lastRoleRef.current = null;
+      return;
+    }
+
+    if (lastRoleRef.current !== user.role) {
+      lastRoleRef.current = user.role;
+      setState(prev => ({
+        ...prev,
+        view: user.role === 'TEACHER' ? 'schedule' : 'dashboard',
+      }));
+    }
+  }, [isAuthenticated, user]);
 
   // Ctrl+K shortcut
   useEffect(() => {
@@ -187,6 +204,7 @@ function AppContent() {
       )}
       
       <main className="flex-1 flex flex-col min-w-0 print:block print:w-full print:h-auto">
+        <AppTourGuide currentView={state.view} />
         {!isMobile && (
         <>
 
@@ -236,7 +254,7 @@ function AppContent() {
                   </ProtectedRoute>
                 )}
                 {state.view === 'dashboard' && (
-                  <ProtectedRoute allowedRoles={['ADMIN', 'TEACHER']}>
+                  <ProtectedRoute allowedRoles={['ADMIN']}>
                     <Dashboard />
                   </ProtectedRoute>
                 )}
@@ -249,7 +267,7 @@ function AppContent() {
                   <ProtectedRoute allowedRoles={['ADMIN']}>
                     <div className="flex-1 bg-white overflow-auto print:overflow-visible print:w-full print:h-auto">
                       <TimetablePrintView classes={state.classes} />
-                      <div className="fixed bottom-12 right-24 print:hidden">
+                      <div className="fixed bottom-12 right-24 print:hidden" data-tour="print-official-map">
                          <button 
                            onClick={() => window.print()}
                            className="bg-slate-900 text-white px-8 py-3 rounded-full font-black text-sm uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all"

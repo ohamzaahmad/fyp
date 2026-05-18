@@ -38,8 +38,8 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS: { id: string; label: string; icon: any; roles?: UserRole[] }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'TEACHER'] },
-  { id: 'timetable', label: 'Timetable', icon: CalendarRange, roles: ['ADMIN', 'TEACHER'] },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
+  { id: 'timetable', label: 'Timetable', icon: CalendarRange, roles: ['ADMIN'] },
   { id: 'suggestions', label: 'Suggestions', icon: Sparkles, roles: ['ADMIN'] },
   { id: 'resources', label: 'Resources', icon: Database, roles: ['ADMIN'] },
   { id: 'schedule', label: 'My Schedule', icon: User, roles: ['TEACHER', 'ADMIN'] },
@@ -81,6 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         isCollapsed ? "w-16" : "w-64",
         className
       )}
+      data-tour="app-sidebar"
     >
       <div className="p-4 flex items-center justify-between border-b border-slate-800 h-14 bg-slate-900/50">
         {!isCollapsed && (
@@ -115,6 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             key={item.id}
             onClick={() => onViewChange(item.id)}
+            data-tour-nav={item.id}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2 rounded transition-all group",
               currentView === item.id 
@@ -168,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
              <ConfirmDialog
                 trigger={
-                  <button className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-900/20 transition-all active:scale-95 group">
+                  <button className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-900/20 transition-all active:scale-95 group" data-tour="generate-timetable">
                     <Wand2 className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform" />
                     Generate Timetable
                   </button>

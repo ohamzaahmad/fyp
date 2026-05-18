@@ -15,6 +15,7 @@ from .views import (
     SolverRunView,
     CurrentUserView,
     MasterMapView,
+    TeacherScheduleExportView,
     TimetableMoveView,
     TimetableGenerateView,
     SystemConfigurationView,
@@ -24,6 +25,7 @@ from .views import (
     TimetableMergeView,
     TimetableCompactView,
     BatchTimetableExportView,
+    ScheduleAdjustmentRequestViewSet,
 )
 from .sse import analytics_sse_view
 
@@ -36,6 +38,7 @@ router.register(r'batches', BatchViewSet)
 router.register(r'faculties', FacultyViewSet)
 router.register(r'assignments', CourseAssignmentViewSet)
 router.register(r'entries', ScheduleEntryViewSet)
+router.register(r'adjustment-requests', ScheduleAdjustmentRequestViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -43,6 +46,7 @@ urlpatterns = [
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
     path('auth/me/', CurrentUserView.as_view(), name='current-user'),
+    path('faculties/<str:faculty_id>/export/', TeacherScheduleExportView.as_view(), name='teacher-schedule-export'),
     path('batches/<str:batch_id>/diagnostic/', BatchDiagnosticView.as_view(), name='batch-diagnostic'),
     path('batches/<str:batch_id>/export/', BatchTimetableExportView.as_view(), name='batch-export-pdf'),
     path('solver/generate/', SolverRunView.as_view(), name='solver-generate'),

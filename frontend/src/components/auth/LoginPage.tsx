@@ -127,7 +127,7 @@ export const LoginPage: React.FC = () => {
                   onClick={() => { setEmail('seed_teacher'); setPassword('password'); }}
                   className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-colors"
                 >
-                  Staff Demo
+                  Teacher Demo
                 </button>
              </div>
              <button className="text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:text-emerald-600 transition-colors">Forgot Password?</button>

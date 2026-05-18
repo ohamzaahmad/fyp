@@ -18,3 +18,15 @@ class IsTeacherUser(permissions.BasePermission):
         if not (user and user.is_authenticated):
             return False
         return Faculty.objects.filter(user=user).exists()
+
+
+class IsTeacherOrAdmin(permissions.BasePermission):
+    """Grants access to teacher-linked users and staff/admin users."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_staff or user.is_superuser:
+            return True
+        return Faculty.objects.filter(user=user).exists()

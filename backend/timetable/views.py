@@ -17,9 +17,10 @@ from django.db import transaction
 from django.utils import timezone
 from django.db.models import Sum
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 
 from . import models, serializers
-from .permissions import IsTeacherUser, IsAdminUser
+from .permissions import IsTeacherUser, IsAdminUser, IsTeacherOrAdmin
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
@@ -346,6 +347,120 @@ class FacultyViewSet(viewsets.ModelViewSet):
 
         data['entries'] = entries
         return Response(data)
+
+
+class TeacherScheduleExportView(APIView):
+    permission_classes = [IsTeacherOrAdmin]
+
+    def _resolve_faculty(self, faculty_value):
+        try:
+            return models.Faculty.objects.get(pk=int(faculty_value))
+        except Exception:
+            return get_object_or_404(models.Faculty, name__iexact=str(faculty_value))
+
+    def get(self, request, faculty_id, *args, **kwargs):
+        faculty = self._resolve_faculty(faculty_id)
+        user = request.user
+        if not (user.is_staff or user.is_superuser):
+            user_faculty = models.Faculty.objects.filter(user=user).first()
+            if not user_faculty or user_faculty.pk != faculty.pk:
+                return Response({'detail': 'Not permitted.'}, status=status.HTTP_403_FORBIDDEN)
+
+        from reportlab.pdfgen import canvas
+
+        buffer = io.BytesIO()
+        page_width, page_height = landscape(A4)
+        pdf = canvas.Canvas(buffer, pagesize=landscape(A4))
+
+        entries = (
+            models.ScheduleEntry.objects
+            .select_related('assignment__course', 'assignment__batch', 'room')
+            .filter(assignment__teacher=faculty)
+            .order_by('day_of_week', 'start_time')
+        )
+
+        rows = [['Teacher Weekly Schedule', '', '', '', '']]
+        rows.append([f'Teacher: {faculty.name} | Department: {faculty.department.name}', '', '', '', ''])
+        rows.append(['DAY', 'TIME', 'COURSE', 'BATCH', 'ROOM'])
+
+        for entry in entries:
+            course = entry.assignment.course if entry.assignment else None
+            batch = entry.assignment.batch if entry.assignment else None
+            room = entry.room
+            rows.append([
+                entry.day_of_week,
+                f'{entry.start_time.strftime("%H:%M")} - {((entry.start_time.hour * 60 + entry.start_time.minute + entry.duration_minutes) // 60):02d}:{((entry.start_time.hour * 60 + entry.start_time.minute + entry.duration_minutes) % 60):02d}',
+                getattr(course, 'course_id', '') or getattr(course, 'name', ''),
+                getattr(batch, 'name', ''),
+                getattr(room, 'name', '') if room else '',
+            ])
+
+        table = Table(rows, colWidths=[page_width * 0.12, page_width * 0.20, page_width * 0.28, page_width * 0.22, page_width * 0.18], repeatRows=3)
+        table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('SPAN', (0, 1), (-1, 1)),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F172A')),
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#E2E8F0')),
+            ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#CBD5E1')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('TEXTCOLOR', (0, 1), (-1, 2), colors.HexColor('#0F172A')),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTNAME', (0, 0), (-1, 2), 'Helvetica-Bold'),
+            ('GRID', (0, 2), (-1, -1), 0.4, colors.HexColor('#94A3B8')),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ]))
+
+        pdf.setTitle(f'{faculty.name} Weekly Schedule')
+        width, height = table.wrap(page_width - 36, page_height - 72)
+        table.drawOn(pdf, 18, max(18, page_height - 32 - height))
+        pdf.showPage()
+        pdf.save()
+        buffer.seek(0)
+
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{faculty.name}-week-schedule.pdf"'
+        return response
+
+
+class ScheduleAdjustmentRequestViewSet(viewsets.ModelViewSet):
+    queryset = models.ScheduleAdjustmentRequest.objects.select_related('teacher', 'teacher__department', 'related_entry', 'related_entry__assignment__course', 'related_entry__assignment__batch', 'related_entry__room', 'reviewed_by')
+    serializer_class = serializers.ScheduleAdjustmentRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS', 'POST'):
+            return [IsAuthenticated()]
+        return [IsAdminUser()]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return qs
+        faculty = models.Faculty.objects.filter(user=user).first()
+        return qs.filter(teacher=faculty) if faculty else qs.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        faculty = models.Faculty.objects.filter(user=user).first()
+        if not faculty:
+            raise PermissionDenied('Only teacher accounts can submit adjustment requests.')
+        serializer.save(teacher=faculty)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            instance.reviewed_by = self.request.user
+            if instance.status in (models.ScheduleAdjustmentRequest.STATUS_APPROVED, models.ScheduleAdjustmentRequest.STATUS_REJECTED):
+                instance.reviewed_at = timezone.now()
+            instance.save(update_fields=['reviewed_by', 'reviewed_at', 'updated_at'])
+
+    def perform_destroy(self, instance):
+        instance.delete()
 
 
 class CourseAssignmentViewSet(viewsets.ModelViewSet):

@@ -35,6 +35,13 @@ class FacultyAdmin(admin.ModelAdmin):
     list_display = ('name', 'department', 'tier', 'email')
 
 
+@admin.register(models.ScheduleAdjustmentRequest)
+class ScheduleAdjustmentRequestAdmin(admin.ModelAdmin):
+    list_display = ('teacher', 'related_entry', 'requested_day', 'requested_time', 'status', 'created_at', 'reviewed_at')
+    list_filter = ('status', 'requested_day', 'created_at')
+    search_fields = ('teacher__name', 'reason', 'admin_notes')
+
+
 @admin.register(models.CourseAssignment)
 class CourseAssignmentAdmin(admin.ModelAdmin):
     list_display = ('course', 'batch', 'teacher', 'weekly_hours', 'type')
