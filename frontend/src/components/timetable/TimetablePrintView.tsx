@@ -92,6 +92,8 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
         }
       `}} />
 
+      {/* Unmatched Sessions - Commented Out */}
+      {/* 
       {unmatched.length > 0 && (
         <div className="mb-6 p-3 border-2 border-red-600 bg-red-50 text-red-800">
           <h2 className="font-bold text-lg">Unmatched Sessions ({unmatched.length})</h2>
@@ -107,6 +109,7 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
           </ul>
         </div>
       )}
+      */}
 
       {buildings.map((building, bIdx) => {
         const rooms: any[] = [];

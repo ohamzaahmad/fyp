@@ -2,13 +2,7 @@ import { Building, Teacher, Department, ClassSession, Faculty } from './types.ts
 
 const _RUNTIME = (globalThis as any).__NEXUS_DATA__ || {};
 
-export let DEPARTMENTS: Department[] = _RUNTIME.DEPARTMENTS || [
-  { id: 1, code: 'CS', name: 'Computer Science' },
-  { id: 2, code: 'PHY', name: 'Physics' },
-  { id: 3, code: 'MATH', name: 'Mathematics' },
-  { id: 4, code: 'ARTS', name: 'Arts' },
-  { id: 5, code: 'ENG', name: 'Engineering' },
-];
+export let DEPARTMENTS: Department[] = _RUNTIME.DEPARTMENTS || [];
 
 export let BUILDINGS: Building[] = _RUNTIME.BUILDINGS || [
   {

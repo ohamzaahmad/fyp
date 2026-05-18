@@ -173,7 +173,7 @@ export const BatchAnalysis: React.FC = () => {
                       <div key={proposal.entry_pk} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                         <div>
                           <div className="text-sm font-bold text-slate-900">
-                            {session?.subjectCode || session?.courseName || `Entry ${proposal.entry_pk}`}
+                            {session?.subjectCode || session?.subjectName || `Entry ${proposal.entry_pk}`}
                           </div>
                           <div className="text-xs text-slate-500 mt-1">
                             {selectedDay ?? 'All Days'} • {formatTime(proposal.orig_start)} → {formatTime(proposal.new_start)} • {proposal.duration}m

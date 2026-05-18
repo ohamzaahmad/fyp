@@ -72,6 +72,11 @@ class BatchViewSet(viewsets.ModelViewSet):
     queryset = models.Batch.objects.all().order_by('name')
     serializer_class = serializers.BatchSerializer
     
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [AllowAny()]
+        return [IsAdminUser()]
+    
     def retrieve(self, request, *args, **kwargs):
         """Support retrieving batches by numeric PK or by name (case-insensitive).
 
@@ -99,7 +104,7 @@ class BatchViewSet(viewsets.ModelViewSet):
 
 
 class BatchDiagnosticView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_batch(self, batch_value):
         try:
@@ -169,7 +174,7 @@ class BatchDiagnosticView(APIView):
 
 
 class BatchTimetableExportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_batch(self, batch_value):
         try:

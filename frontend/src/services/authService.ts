@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 // Respect Vite env var (full backend URL) or fall back to relative '/api' which will use the dev server proxy.
-const API_BASE_URL = ((import.meta as any).env?.VITE_API_URL as string) || '/api';
+const RUNTIME_API_OVERRIDE = (typeof window !== 'undefined' && localStorage.getItem('nexus_api_base')) || null;
+const API_BASE_URL = RUNTIME_API_OVERRIDE || ((import.meta as any).env?.VITE_API_URL as string) || '/api';
 
 export type UserRole = 'ADMIN' | 'TEACHER' | 'STUDENT';
 

@@ -31,7 +31,7 @@ const Classrooms: React.FC = () => {
   const submit = async () => {
     try {
       if (editingId) {
-        await api.put(`/rooms/${editingId}/`, form);
+        await api.patch(`/rooms/${editingId}/`, form);
         toast.show('Room updated', 'success');
       } else {
         await api.post('/rooms/', form);

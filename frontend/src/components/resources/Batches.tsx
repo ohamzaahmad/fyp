@@ -39,7 +39,7 @@ const Batches: React.FC = () => {
   const submit = async () => {
     try {
       if (editingId) {
-        await api.put(`/batches/${editingId}/`, form);
+        await api.patch(`/batches/${editingId}/`, form);
         toast.show('Batch updated', 'success');
       } else {
         await api.post('/batches/', form);

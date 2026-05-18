@@ -9,10 +9,14 @@ export type NotificationItem = {
 
 export async function fetchNotifications(): Promise<NotificationItem[]> {
   try {
-    const res = await api.get('/notifications/');
-    // allow either array or { notifications: [] }
-    if (Array.isArray(res.data)) return res.data;
-    return res.data.notifications || [];
+    const res = await api.get('/analytics/summary/');
+    const feed = Array.isArray(res.data?.feed) ? res.data.feed : [];
+    return feed.map((item: any, idx: number) => ({
+      id: String(item?.id ?? `feed-${idx}`),
+      message: String(item?.message ?? item?.event_type ?? 'Notification'),
+      created_at: item?.created_at,
+      unread: false,
+    }));
   } catch (e) {
     // fallback to local sample notifications when backend not present or offline
     return [
@@ -23,12 +27,9 @@ export async function fetchNotifications(): Promise<NotificationItem[]> {
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  try {
-    await api.post(`/notifications/${encodeURIComponent(id)}/mark-read/`);
-  } catch (e) {
-    // ignore errors - best-effort
-    return;
-  }
+  // No backend endpoint currently exists for read-tracking; keep this best-effort no-op.
+  void id;
+  return;
 }
 
 export default { fetchNotifications, markNotificationRead };

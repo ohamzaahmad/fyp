@@ -34,6 +34,7 @@ interface SidebarProps {
   masterMap?: MasterMap;
   efficiency: number;
   onGenerate: () => void;
+  className?: string;
 }
 
 const NAV_ITEMS: { id: string; label: string; icon: any; roles?: UserRole[] }[] = [
@@ -55,7 +56,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleBuilding,
   masterMap,
   efficiency,
-  onGenerate
+  onGenerate,
+  className
 }) => {
   const { user, logout, isAuthenticated } = useAuth();
   const data = useData();
@@ -76,7 +78,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside 
       className={cn(
         "h-screen bg-slate-950 text-slate-400 flex flex-col transition-all duration-300 border-r border-slate-800 shadow-xl",
-        isCollapsed ? "w-16" : "w-64"
+        isCollapsed ? "w-16" : "w-64",
+        className
       )}
     >
       <div className="p-4 flex items-center justify-between border-b border-slate-800 h-14 bg-slate-900/50">
@@ -143,7 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Efficiency & Generate - Only for ADMIN */}
         {!isCollapsed && user?.role === 'ADMIN' && (
           <div className="space-y-3">
-             <div className="flex items-center justify-between bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
+             {/* <div className="flex items-center justify-between bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
                 <div className="flex items-center gap-3">
                    <div className="w-10 h-10 relative flex items-center justify-center shrink-0">
                       <div className="absolute inset-0 rounded-full border-2 border-slate-700" />
@@ -161,7 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Global Optima</p>
                    </div>
                 </div>
-             </div>
+             </div> */}
 
              <ConfirmDialog
                 trigger={

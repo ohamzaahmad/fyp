@@ -80,7 +80,8 @@ export const getMasterTimetable = async (): Promise<MasterMap> => {
 };
 
 export const moveClass = async (id: string, newTime: string, roomId?: string): Promise<ClassSession> => {
-  const response = await api.patch(`/timetable/${id}/move/`, { startTime: newTime, roomId });
+  const normalizedTime = String(newTime || '').slice(0, 5);
+  const response = await api.patch(`/timetable/${id}/move/`, { startTime: normalizedTime, roomId });
   return response.data;
 };
 
@@ -91,22 +92,42 @@ export const createEntry = async (payload: {
   start_time: string;
   duration_minutes: number;
 }): Promise<any> => {
-  const response = await api.post('/entries/', payload);
+  const normalizedPayload = {
+    assignment: payload.assignment,
+    room: payload.room,
+    day_of_week: payload.day_of_week,
+    start_time: String(payload.start_time || '').slice(0, 5),
+    duration_minutes: payload.duration_minutes,
+  };
+  const response = await api.post('/entries/', normalizedPayload);
   return response.data;
 };
 
 export const updateEntry = async (id: string | number, payload: Partial<{
   assignment: number;
   room: number;
+  roomId: number;
   day_of_week: string;
   start_time: string;
+  startTime: string;
   duration_minutes: number;
+  durationMinutes: number;
   is_locked: boolean;
+  isLocked: boolean;
   is_merged: boolean;
+  isMerged: boolean;
 }>): Promise<any> => {
   // Clean ID if it has 'entry-' prefix
   const cleanId = String(id).replace('entry-', '');
-  const response = await api.patch(`/entries/${cleanId}/`, payload);
+  const normalizedPayload: any = {
+    ...payload,
+    room: payload.room ?? payload.roomId,
+    start_time: (payload.start_time ?? payload.startTime) ? String(payload.start_time ?? payload.startTime).slice(0, 5) : undefined,
+    duration_minutes: payload.duration_minutes ?? payload.durationMinutes,
+    is_locked: payload.is_locked ?? payload.isLocked,
+    is_merged: payload.is_merged ?? payload.isMerged,
+  };
+  const response = await api.patch(`/entries/${cleanId}/`, normalizedPayload);
   return response.data;
 };
 
@@ -123,9 +144,12 @@ export const mergeEntries = async (entryIds: string[]): Promise<any> => {
 };
 
 
-export const generateSchedule = async (options?: any): Promise<{ status: string; task_id: string }> => {
+export const generateSchedule = async (options?: any): Promise<{ status: string; task_id?: string }> => {
   const response = await api.post('/timetable/generate/', options || {});
-  return response.data;
+  const data = response.data || {};
+  if (data.task_id) return { status: 'queued', task_id: data.task_id };
+  if (data.status) return { status: data.status };
+  return { status: 'accepted' };
 };
 
 export const fetchDepartments = async (): Promise<Department[]> => {

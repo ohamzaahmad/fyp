@@ -182,10 +182,11 @@ function AppContent() {
           masterMap={masterMap}
           efficiency={87}
           onGenerate={triggerOptimization}
+          className="print:hidden"
         />
       )}
       
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 print:block print:w-full print:h-auto">
         {!isMobile && (
         <>
 
@@ -246,7 +247,7 @@ function AppContent() {
                 )}
                 {state.view === 'export' && (
                   <ProtectedRoute allowedRoles={['ADMIN']}>
-                    <div className="flex-1 bg-white overflow-auto">
+                    <div className="flex-1 bg-white overflow-auto print:overflow-visible print:w-full print:h-auto">
                       <TimetablePrintView classes={state.classes} />
                       <div className="fixed bottom-12 right-24 print:hidden">
                          <button 
@@ -320,26 +321,6 @@ function AppContent() {
           )}
         </AnimatePresence>
 
-        {/* Bottom Status Bar */}
-        {!isMobile && (
-          <footer className="h-8 bg-slate-950 text-slate-500 px-6 flex items-center justify-between text-[9px] shrink-0 border-t border-slate-800 z-50">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                <span className="font-black uppercase tracking-widest text-slate-300">AI Logic Core: Active</span>
-              </div>
-              <div className="h-3 w-[1px] bg-slate-800" />
-              <div className="flex gap-4">
-                <span className="font-bold uppercase tracking-tighter">Total Constraints: 1,402</span>
-                <span className="font-bold uppercase tracking-tighter">Conflicts Resolved: 12</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-6 uppercase font-black tracking-widest">
-              <span className="text-slate-600">ID: PROD_UAF_S26</span>
-              <span className="text-emerald-500/50">User: Admin_Master</span>
-            </div>
-          </footer>
-        )}
       </main>
 
       {/* Optimization Overlay */}
