@@ -70,9 +70,9 @@ export const BatchObserver: React.FC = () => {
   };
 
   return (
-    <div className="mt-6 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+    <div className="mt-6 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm" data-tour="batch-observer">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-bold">Download Timetable</h3>
+        <h3 className="text-sm font-bold" data-tour="batch-observer-title">Download Timetable</h3>
         <button onClick={() => { setMap(null); setBatches([]); setSelected(null); setSessions([]); }} className="text-xs text-slate-400 hover:underline">Clear</button>
       </div>
 
@@ -81,7 +81,7 @@ export const BatchObserver: React.FC = () => {
 
       {!loading && !error && (
         <div>
-          <select value={selected ?? ''} onChange={(e) => setSelected(e.target.value || null)} className="w-full p-2 border rounded mb-3 text-sm">
+          <select data-tour="batch-select" value={selected ?? ''} onChange={(e) => setSelected(e.target.value || null)} className="w-full p-2 border rounded mb-3 text-sm">
             <option value="">-- Select Batch --</option>
             {batches.map(b => <option key={b.id} value={b.id}>{b.name || b.id}</option>)}
           </select>
@@ -91,6 +91,7 @@ export const BatchObserver: React.FC = () => {
               <div className="mb-2 text-slate-600">Sessions for <strong>{selected}</strong> ({sessions.length})</div>
               <div className="mb-3 flex items-center gap-2 flex-wrap">
                 <button 
+                  data-tour="batch-download-pdf"
                   onClick={downloadTimetable} 
                   disabled={loading}
                   className="text-xs bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white px-3 py-1.5 rounded text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors"

@@ -1,190 +1,239 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Wand2 } from 'lucide-react';
-import { driver, type Driver } from 'driver.js';
-import 'driver.js/dist/driver.css';
+import React, { useEffect, useMemo, useState } from 'react';
+import Joyride, { CallBackProps, STATUS, Step } from 'react-joyride';
+import { HelpCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 
 interface AppTourGuideProps {
   currentView: string;
 }
 
+type TourStep = Step & { route?: string };
+
 const seenKeyForRole = (role?: string | null) => `nexus_tour_seen_${role || 'guest'}`;
 
-export const AppTourGuide: React.FC<AppTourGuideProps> = ({ currentView }) => {
+const AppTourGuide: React.FC<AppTourGuideProps> = ({ currentView }) => {
   const { user, isAuthenticated } = useAuth();
-  const driverRef = useRef<Driver | null>(null);
-  const autoStartedRef = useRef(false);
-  const [isStarting, setIsStarting] = useState(false);
+  const [run, setRun] = useState(false);
+  const [stepIndex, setStepIndex] = useState(0);
 
   const seenKey = useMemo(() => seenKeyForRole(user?.role), [user?.role]);
 
-  const steps = useMemo(() => {
-    const baseSteps = [
-      {
-        element: '[data-tour="app-sidebar"]',
-        popover: {
-          title: 'App navigation',
-          description: 'This sidebar is the main control surface for the app. Use it to switch between timetable, schedule, export, and settings.',
-          side: 'right' as const,
-        },
-      },
+  const internalSteps: TourStep[] = useMemo(() => {
+    // If the user is not authenticated, show a login/demo + batch download tour
+    if (!isAuthenticated || !user) {
+      return [
+        { target: '[data-tour="login-form"]', content: 'Welcome — sign in to access the full NexusTime experience.', placement: 'bottom' },
+        { target: '[data-tour="login-signin"]', content: 'Enter credentials and click here to sign in.', placement: 'bottom' },
+        { target: '[data-tour="login-admin-demo"]', content: 'Use this demo login to explore admin features.', placement: 'bottom' },
+        { target: '[data-tour="login-teacher-demo"]', content: 'Use the teacher demo to view schedule features.', placement: 'bottom' },
+        { target: '[data-tour="batch-observer"]', content: 'Or download a batch timetable directly from here (no login required).', placement: 'top' },
+        { target: '[data-tour="batch-select"]', content: 'Select a batch to preview its sessions.', placement: 'bottom' },
+        { target: '[data-tour="batch-download-pdf"]', content: 'Download a PDF of the selected batch timetable.', placement: 'left' },
+      ];
+    }
+
+    const base: TourStep[] = [
+      { target: '[data-tour="app-sidebar"]', content: 'Use this sidebar to navigate between Dashboard, Timetable, Schedule and more.', placement: 'right' },
     ];
 
     if (user?.role === 'TEACHER') {
       return [
-        ...baseSteps,
-        {
-          element: '[data-tour-nav="schedule"]',
-          popover: {
-            title: 'My Schedule',
-            description: 'This opens your weekly timetable. It is the default landing page after teacher login.',
-            side: 'right' as const,
-          },
-        },
-        {
-          element: '[data-tour="teacher-schedule-page"]',
-          popover: {
-            title: 'Daily schedule',
-            description: `You can review the classes for ${currentView === 'schedule' ? 'the selected day' : 'your day'} here and switch days from the top row.`,
-            side: 'top' as const,
-          },
-        },
-        {
-          element: '[data-tour="teacher-download-schedule"]',
-          popover: {
-            title: 'Download week schedule',
-            description: 'Use this button to export your full weekly schedule as a PDF.',
-            side: 'left' as const,
-          },
-        },
-        {
-          element: '[data-tour="teacher-adjustment-form"]',
-          popover: {
-            title: 'Adjustment request',
-            description: 'Submit a timetable adjustment request for admin review from here.',
-            side: 'left' as const,
-          },
-        },
+        ...base,
+        { target: '[data-tour-nav="schedule"]', content: 'Open your weekly schedule here.', placement: 'right' },
+        { target: '[data-tour="teacher-schedule-page"]', content: 'This is your schedule. Switch days from the top row.', placement: 'top' },
+        { target: '[data-tour="teacher-download-schedule"]', content: 'Download your weekly schedule as PDF.', placement: 'left' },
+        { target: '[data-tour="teacher-adjustment-form"]', content: 'Submit an adjustment request for admin review.', placement: 'left' },
+        { target: '[data-tour="teacher-adjustment-requests"]', content: 'View pending and resolved adjustment requests here.', placement: 'bottom' },
       ];
     }
 
     return [
-      ...baseSteps,
-      {
-        element: '[data-tour-nav="dashboard"]',
-        popover: {
-          title: 'Dashboard',
-          description: 'Open the live dashboard for efficiency, utilization, and activity logs.',
-          side: 'right' as const,
-        },
-      },
-      {
-        element: '[data-tour="dashboard-overview"]',
-        popover: {
-          title: 'Live overview',
-          description: 'These cards summarize the system health and scheduling metrics.',
-          side: 'bottom' as const,
-        },
-      },
-      {
-        element: '[data-tour-nav="timetable"]',
-        popover: {
-          title: 'Timetable grid',
-          description: 'Switch here to edit the grid and manage sessions.',
-          side: 'right' as const,
-        },
-      },
-      {
-        element: '[data-tour-nav="export"]',
-        popover: {
-          title: 'Print timetable',
-          description: 'Use this page to print the official UAF map view.',
-          side: 'right' as const,
-        },
-      },
-      {
-        element: '[data-tour="generate-timetable"]',
-        popover: {
-          title: 'Generate timetable',
-          description: 'This triggers the scheduling engine to rebuild the timetable from the current constraints.',
-          side: 'top' as const,
-        },
-      },
+      ...base,
+      { target: '[data-tour-nav="dashboard"]', content: 'Open the dashboard for system summaries and KPIs.', placement: 'right' },
+      { target: '[data-tour="dashboard-overview"]', content: 'Overview cards show health, utilization and quick metrics.', placement: 'bottom' },
+      { target: '[data-tour-nav="timetable"]', content: 'Open the timetable editor to manage sessions.', placement: 'right' },
+      { target: '[data-tour="timetable-toolbar"]', content: 'Toolbar for the timetable with editing controls.', placement: 'bottom' },
+      { target: '[data-tour="timetable-day-selector"]', content: 'Switch visible day using this selector.', placement: 'bottom' },
+      { target: '[data-tour="timetable-zoom-controls"]', content: 'Use these to zoom the timetable grid.', placement: 'left' },
+      // Deep timetable interactions
+      { target: '[data-tour="timeslot-card"]', content: 'This is a timeslot card — it represents a scheduled class.', placement: 'top' },
+      { target: '[data-tour="timeslot-conflict-tooltip"]', content: 'Hover to view conflict details and suggested fixes.', placement: 'top' },
+      { target: '[data-tour="timeslot-edit"]', content: 'Admins can edit a session from this button.', placement: 'left' },
+      { target: '[data-tour="timeslot-lock"]', content: 'Lock a session to prevent edits or dragging.', placement: 'left' },
+      { target: '[data-tour-nav="export"]', content: 'Go to the export/print view for the official map.', placement: 'right' },
+      { target: '[data-tour="print-official-map"]', content: 'Print the official UAF map view from here.', placement: 'left' },
+      // Add session modal deep steps (will appear when modal is open)
+      { target: '[data-tour="modal-assignment"]', content: 'Select the assignment (course · batch · teacher) for this session.', placement: 'bottom' },
+      { target: '[data-tour="modal-room"]', content: 'Choose a classroom for the session.', placement: 'bottom' },
+      { target: '[data-tour="modal-timeslots"]', content: 'Quick-select common timeslot ranges for convenience.', placement: 'bottom' },
+      { target: '[data-tour="modal-duration"]', content: 'Pick the session duration in minutes.', placement: 'bottom' },
+      { target: '[data-tour="modal-conflict-preview"]', content: 'Live conflict preview updates as you change fields.', placement: 'top' },
+      { target: '[data-tour="modal-submit"]', content: 'Add or update the session using this button.', placement: 'left' },
+
+      // Suggestions deep steps
+      { target: '[data-tour-nav="suggestions"]', content: 'Open the Suggestions view to resolve duplicates & conflicts.', placement: 'right' },
+      { target: '[data-tour="suggestions-tab-suggestions"]', content: 'Primary tab showing merge candidates and conflicts.', placement: 'bottom' },
+      { target: '[data-tour="merge-candidates-header"]', content: 'Merge Candidates lists sections that can be combined to save rooms.', placement: 'bottom' },
+      { target: '[data-tour="suggestions-tab-batch-analysis"]', content: 'Switch to Batch Analysis for per-batch metrics and quality checks.', placement: 'bottom' },
+      { target: '[data-tour="suggestions-approve-merge"]', content: 'Approve merge candidates to combine overlapping sections.', placement: 'left' },
+      { target: '[data-tour="suggestions-locate"]', content: 'Locate a session in the Timetable grid from here.', placement: 'left' },
+      { target: '[data-tour="suggestions-conflicts"]', content: 'View detected conflicts and quick-fix suggestions here.', placement: 'bottom' },
+
+      // Generate timetable + Resource management & settings
+      { target: '[data-tour="generate-timetable"]', content: 'Click to run the AI timetable generator (admin only).', placement: 'left' },
+      { target: '[data-tour-nav="resources"]', content: 'Manage master data like departments, batches and classrooms.', placement: 'right' },
+      { target: '[data-tour="resource-tab-departments"]', content: 'Departments tab: manage departments.', placement: 'bottom' },
+      { target: '[data-tour="resource-tab-courses"]', content: 'Courses tab: manage course records.', placement: 'bottom' },
+      { target: '[data-tour="resource-tab-teachers"]', content: 'Teachers tab: add or edit faculty records.', placement: 'bottom' },
+      { target: '[data-tour="resource-tab-batches"]', content: 'Batches tab: manage student groups and intake years.', placement: 'bottom' },
+      { target: '[data-tour="resource-tab-assignments"]', content: 'Assignments tab: link courses to batches and teachers.', placement: 'bottom' },
+      { target: '[data-tour="resource-tab-classrooms"]', content: 'Classrooms tab: manage room details and capacities.', placement: 'bottom' },
+      { target: '[data-tour-nav="settings"]', content: 'Open system settings to change global preferences.', placement: 'right' },
+      { target: '[data-tour="settings-save-changes"]', content: 'Save system settings and theme here.', placement: 'left' },
     ];
-  }, [currentView, user?.role]);
+  }, [user?.role, currentView]);
 
-  const startTour = () => {
-    if (!isAuthenticated || !user) return;
-    if (typeof window === 'undefined') return;
+  const formattedSteps = internalSteps.map(s => ({
+    target: s.target,
+    content: s.content,
+    placement: s.placement,
+    disableBeacon: true,
+  }));
 
-    if (driverRef.current) {
-      try { driverRef.current.destroy(); } catch (_) {}
-      driverRef.current = null;
+  const startTour = (auto = false) => {
+    setStepIndex(0);
+    setRun(true);
+    if (auto) {
+      try { localStorage.removeItem(seenKey); } catch (_) {}
+    }
+  };
+
+  const waitForTarget = (target: string | HTMLElement | undefined | null, timeout = 3000) => {
+    return new Promise<boolean>((resolve) => {
+      if (!target) return resolve(false);
+      if (typeof target !== 'string') return resolve(true);
+      const start = Date.now();
+      const attempt = () => {
+        const el = document.querySelector(target as string);
+        if (el) return resolve(true);
+        if (Date.now() - start > timeout) return resolve(false);
+        setTimeout(attempt, 150);
+      };
+      attempt();
+    });
+  };
+
+  const handleJoyrideCallback = async (data: CallBackProps) => {
+    const { status, index, type, action } = data as CallBackProps & { action?: string };
+    if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
+      setRun(false);
+      try { localStorage.setItem(seenKey, '1'); } catch (_) {}
+      return;
     }
 
-    setIsStarting(true);
-    const instance = driver({
-      animate: true,
-      allowClose: true,
-      allowKeyboardControl: true,
-      overlayOpacity: 0.55,
-      smoothScroll: true,
-      showProgress: true,
-      progressText: 'Tour progress',
-      doneBtnText: 'Finish',
-      nextBtnText: 'Next',
-      prevBtnText: 'Back',
-      steps: steps as any,
-      onDestroyed: () => {
-        if (autoStartedRef.current) {
-          try { localStorage.setItem(seenKey, '1'); } catch (_) {}
+    // Before showing a step: ensure navigation targets are mounted
+    if (type === 'step:before') {
+      const next = internalSteps[index];
+      if (!next) return;
+      const target = next.target;
+
+      if (typeof target === 'string') {
+        // If the step asks us to navigate via sidebar nav, click it.
+        if (target.includes('data-tour-nav')) {
+          const nav = document.querySelector(target) as HTMLElement | null;
+          if (nav) nav.click();
+
+          const found = await waitForTarget(internalSteps[index].target, 2500);
+          setTimeout(() => setStepIndex(index), found ? 50 : 500);
+          return;
         }
-        autoStartedRef.current = false;
-        setIsStarting(false);
-      },
-    });
-    driverRef.current = instance;
-    instance.drive();
+
+        // If the step targets an internal resource tab or suggestions tab, click the tab button
+        // so that its content becomes active before the tour highlights it.
+        if (target.includes('resource-tab-') || target.includes('suggestions-tab-')) {
+          const tabBtn = document.querySelector(target) as HTMLElement | null;
+          if (tabBtn) tabBtn.click();
+
+          const found = await waitForTarget(target, 2000);
+          setTimeout(() => setStepIndex(index), found ? 50 : 500);
+          return;
+        }
+      }
+
+      const found = await waitForTarget(target, 2000);
+      setTimeout(() => setStepIndex(index), found ? 50 : 500);
+      return;
+    }
+
+    // After a step completes (user clicked next or Joyride progressed), advance the controlled index
+    if (type === 'step:after' || action === 'next') {
+      const nextIndex = (typeof index === 'number') ? index + 1 : stepIndex + 1;
+      if (nextIndex >= formattedSteps.length) {
+        setRun(false);
+        try { localStorage.setItem(seenKey, '1'); } catch (_) {}
+        return;
+      }
+      setStepIndex(nextIndex);
+      return;
+    }
+
+    if (type === 'error:target_not_found') {
+      // Retry the same step after a short delay
+      setTimeout(() => setStepIndex(index), 600);
+      return;
+    }
   };
 
   useEffect(() => {
-    const onStartTour = () => startTour();
-    window.addEventListener('nexus:start-tour', onStartTour as EventListener);
-    return () => {
-      window.removeEventListener('nexus:start-tour', onStartTour as EventListener);
-      try { driverRef.current?.destroy(); } catch (_) {}
-      driverRef.current = null;
-    };
-  }, [steps, isAuthenticated, user, seenKey]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !user) return;
-    if (typeof window === 'undefined') return;
     try {
       if (localStorage.getItem(seenKey) === '1') return;
     } catch (_) {}
-
-    autoStartedRef.current = true;
-    const timer = window.setTimeout(() => startTour(), 700);
+    // auto-start the tour once per role after a small delay
+    const timer = window.setTimeout(() => startTour(true), 700);
     return () => window.clearTimeout(timer);
-  }, [isAuthenticated, user, seenKey]);
-
-  if (!isAuthenticated || !user) return null;
+  }, [seenKey]);
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        autoStartedRef.current = false;
-        startTour();
-      }}
-      disabled={isStarting}
-      className="fixed bottom-6 right-6 z-[90] inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-xs font-black uppercase tracking-widest text-white shadow-2xl shadow-slate-900/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-60 print:hidden"
-      data-tour="start-tour-button"
-    >
-      <Wand2 className="h-4 w-4 text-emerald-400" />
-      {isStarting ? 'Starting Tour' : 'Start Tour'}
-    </button>
+    <>
+      <Joyride
+        steps={formattedSteps}
+        run={run}
+        stepIndex={stepIndex}
+        continuous
+        showSkipButton
+        showProgress
+        disableCloseOnEsc={false}
+        disableOverlayClose={false}
+        locale={{
+          back: 'Back',
+          close: 'Close',
+          last: 'Finish',
+          next: 'Next',
+          skip: 'Skip'
+        }}
+        scrollToFirstStep
+        styles={{
+          options: {
+            zIndex: 10000,
+            primaryColor: '#0f766e',
+            overlayColor: 'rgba(2,6,23,0.75)',
+            // keep default border radius; avoid unsupported style keys for type safety
+          }
+        }}
+        callback={handleJoyrideCallback}
+      />
+
+      <button
+        type="button"
+        onClick={() => startTour(false)}
+        className="fixed bottom-6 right-6 z-[90] rounded-full bg-slate-900 w-12 h-12 flex items-center justify-center text-white shadow-2xl shadow-slate-900/30 transition-transform hover:scale-105 active:scale-95 print:hidden"
+        data-tour="start-tour-button"
+        aria-label="Start Tour"
+        title="Start Tour"
+      >
+        <HelpCircle className="h-5 w-5 text-emerald-400" />
+      </button>
+    </>
   );
 };
 

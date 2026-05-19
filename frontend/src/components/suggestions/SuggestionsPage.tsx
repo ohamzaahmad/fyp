@@ -239,6 +239,7 @@ export const SuggestionsPage: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
+              data-tour={`suggestions-tab-${tab.id}`}
               className={cn(
                 'flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-xs font-bold transition-all border border-b-0',
                 activeTab === tab.id
@@ -264,7 +265,7 @@ export const SuggestionsPage: React.FC = () => {
             <section>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <h2 data-tour="merge-candidates-header" className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                     <GitMerge className="w-5 h-5 text-emerald-500" />
                     Merge Candidates
                     <span className="ml-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-black">
@@ -350,6 +351,7 @@ export const SuggestionsPage: React.FC = () => {
                             <button
                               onClick={() => handleApproveMerge(group)}
                               disabled={mergingId === group.key}
+                              data-tour="suggestions-approve-merge"
                               className={cn(
                                 'px-6 py-3 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all',
                                 mergingId === group.key
@@ -363,6 +365,7 @@ export const SuggestionsPage: React.FC = () => {
                             </button>
                             <button
                               onClick={() => handleLocateSession(group.sessions[0].id)}
+                              data-tour="suggestions-locate"
                               className="text-[10px] font-bold text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 transition-colors"
                             >
                               Locate in Grid
@@ -378,7 +381,7 @@ export const SuggestionsPage: React.FC = () => {
 
             {/* ── Conflicts ──────────────────────────────────────────── */}
             <section className="pt-2">
-              <div className="flex items-center justify-between mb-4">
+              <div data-tour="suggestions-conflicts" className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 text-rose-500" />
