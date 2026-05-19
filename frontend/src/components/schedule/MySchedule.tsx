@@ -3,6 +3,7 @@ import { useData } from '../../context/DataContext.tsx';
 import { User, MapPin, Calendar, Clock, BookOpen, ChevronRight, TrendingUp, Download, Send, CheckCircle2, XCircle } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { getTeacherSchedule, downloadTeacherSchedule, fetchAdjustmentRequests, createAdjustmentRequest, updateAdjustmentRequest } from '../../services/api.ts';
+import { getSlotRanges } from '../../constants.ts';
 import { useToast } from '../ui/Toast.tsx';
 import Popover from '../ui/Popover.tsx';
 import { Button } from '../ui/Button.tsx';
@@ -200,6 +201,18 @@ export const MySchedule: React.FC = () => {
     [teacherSessions, requestEntryId]
   );
 
+  const timeToSlotLabel = (t: string | undefined | null) => {
+    if (!t) return '';
+    const timeShort = String(t).split(':').slice(0, 2).join(':');
+    const slot = getSlotRanges().find((s: any) => {
+      if (!s) return false;
+      const hh = String(Math.floor(s.start / 60)).padStart(2, '0');
+      const mm = String(s.start % 60).padStart(2, '0');
+      return `${hh}:${mm}` === timeShort;
+    });
+    return slot ? slot.label : timeShort;
+  };
+
   const handleDownloadWeekSchedule = async () => {
     if (!selectedTeacherId) return;
     setDownloadingSchedule(true);
@@ -289,20 +302,23 @@ export const MySchedule: React.FC = () => {
               <Download className="w-4 h-4" />
               {downloadingSchedule ? 'Downloading...' : 'Download Week Schedule'}
             </button>
-            {DAYS.map((day: string) => (
-              <button
-                key={day}
-                onClick={() => setSelectedDay(day)}
-                className={cn(
-                  "px-4 py-2 rounded-xl text-xs font-black transition-all",
-                  selectedDay === day 
-                    ? "bg-slate-900 text-white shadow-lg" 
-                    : "bg-slate-50 text-slate-400 hover:bg-slate-100"
-                )}
-              >
-                {day}
-              </button>
-            ))}
+
+            <div data-tour="teacher-day-selector" className="flex items-center gap-3">
+              {DAYS.map((day: string) => (
+                <button
+                  key={day}
+                  onClick={() => setSelectedDay(day)}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-xs font-black transition-all",
+                    selectedDay === day 
+                      ? "bg-slate-900 text-white shadow-lg" 
+                      : "bg-slate-50 text-slate-400 hover:bg-slate-100"
+                  )}
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -410,7 +426,16 @@ export const MySchedule: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
-                  <input value={requestTime} onChange={(e) => setRequestTime(e.target.value)} type="time" className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm" />
+                  <select value={requestTime} onChange={(e) => setRequestTime(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm">
+                    <option value="">Select time slot</option>
+                    {getSlotRanges().map((slot: any) => {
+                      if (!slot) return null; // skip Break
+                      const hh = String(Math.floor(slot.start / 60)).padStart(2, '0');
+                      const mm = String(slot.start % 60).padStart(2, '0');
+                      const value = `${hh}:${mm}`;
+                      return <option key={slot.index} value={value}>{slot.label}</option>;
+                    })}
+                  </select>
                   <textarea value={requestReason} onChange={(e) => setRequestReason(e.target.value)} placeholder="Explain the adjustment you need" className="col-span-2 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm min-h-[92px]" />
                 </div>
 
@@ -475,7 +500,7 @@ export const MySchedule: React.FC = () => {
                       </div>
                       <p className="text-xs text-slate-600 mb-2">{req.reason}</p>
                       <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500 uppercase tracking-widest">
-                        <span>{req.requested_day || 'Any day'}{req.requested_time ? ` • ${req.requested_time}` : ''}</span>
+                        <span>{req.requested_day || 'Any day'}{req.requested_time ? ` • ${timeToSlotLabel(req.requested_time)}` : ''}</span>
                         {req.status === 'PENDING' && (
                           <div className="flex gap-2">
                             <button type="button" disabled={reviewLoadingId === req.id} onClick={() => handleReviewRequest(req.id, 'APPROVED')} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 text-white font-black disabled:opacity-60">
@@ -494,18 +519,47 @@ export const MySchedule: React.FC = () => {
             )}
 
             {isTeacher ? (
-              <div className="bg-slate-900 text-emerald-400 p-8 rounded-3xl relative overflow-hidden shadow-2xl shadow-slate-900/40" data-tour="teacher-adjustment-requests">
-                <div className="absolute top-0 right-0 p-4 opacity-10">
-                  <User className="w-32 h-32 text-white" />
+              <>
+                <div className="bg-slate-900 text-emerald-400 p-8 rounded-3xl relative overflow-hidden shadow-2xl shadow-slate-900/40">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <User className="w-32 h-32 text-white" />
+                  </div>
+                  <h3 className="text-white text-xl font-black mb-2 relative z-10">Teacher Tools</h3>
+                  <p className="text-emerald-400/80 text-sm font-medium mb-6 relative z-10 leading-relaxed">Download your weekly schedule, submit an adjustment request, and track your timetable only.</p>
+                  <div className="space-y-2 relative z-10 text-sm text-emerald-50/90">
+                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Week schedule download</div>
+                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Adjustment requests to admin</div>
+                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Daily class overview</div>
+                  </div>
                 </div>
-                <h3 className="text-white text-xl font-black mb-2 relative z-10">Teacher Tools</h3>
-                <p className="text-emerald-400/80 text-sm font-medium mb-6 relative z-10 leading-relaxed">Download your weekly schedule, submit an adjustment request, and track your timetable only.</p>
-                <div className="space-y-2 relative z-10 text-sm text-emerald-50/90">
-                  <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Week schedule download</div>
-                  <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Adjustment requests to admin</div>
-                  <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Daily class overview</div>
+
+                <div data-tour="teacher-adjustment-requests" className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm p-5">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Your Adjustment Requests</h2>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{adjustmentRequests.length} total</span>
+                  </div>
+                  <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1 mt-4">
+                    {adjustmentRequests.length === 0 ? (
+                      <div className="text-sm text-slate-500 bg-slate-50 rounded-2xl p-4">You have no adjustment requests.</div>
+                    ) : adjustmentRequests.map((req: any) => (
+                      <div key={req.id} className={cn('rounded-2xl border p-4', req.status === 'PENDING' ? 'border-amber-200 bg-amber-50/60' : req.status === 'APPROVED' ? 'border-emerald-200 bg-emerald-50/60' : 'border-rose-200 bg-rose-50/60')}>
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{req.course_code || req.course_name || 'Class'}{req.batch_name ? ` • ${req.batch_name}` : ''}</p>
+                            <p className="text-[11px] text-slate-500">{req.teacher_name || ''}</p>
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-widest">{req.status}</span>
+                        </div>
+                        <p className="text-xs text-slate-600 mb-2">{req.reason}</p>
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-slate-500 uppercase tracking-widest">
+                          <span>{req.requested_day || 'Any day'}{req.requested_time ? ` • ${timeToSlotLabel(req.requested_time)}` : ''}</span>
+                          <span className="text-xs text-slate-400">{req.created_at ? new Date(req.created_at).toLocaleString() : ''}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </>
             ) : (
               <div className="bg-slate-900 text-emerald-400 p-8 rounded-3xl relative overflow-hidden shadow-2xl shadow-slate-900/40">
                 <div className="absolute top-0 right-0 p-4 opacity-10">

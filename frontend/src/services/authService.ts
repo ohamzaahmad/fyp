@@ -11,6 +11,7 @@ export interface AuthUser {
   name: string;
   email: string;
   role: UserRole;
+  mustChangePassword?: boolean;
 }
 
 export interface AuthResponse {
@@ -43,10 +44,12 @@ export const login = async (identifier: string, password: string): Promise<AuthR
   const isTeacher = !!(resp?.teacher || resp?.faculty);
   const role: UserRole = resp?.is_superuser || resp?.is_staff ? 'ADMIN' : isTeacher ? 'TEACHER' : 'STUDENT';
   const name = resp?.teacher?.name || resp?.faculty?.name || resp?.username || resp?.email || '';
+  const mustChangePassword = !!(resp?.faculty?.must_change_password || resp?.teacher?.must_change_password);
   const user: AuthUser = {
     id: resp?.username || resp?.email || '',
     name,
     email: resp?.email || '',
+    mustChangePassword,
     role,
   };
 

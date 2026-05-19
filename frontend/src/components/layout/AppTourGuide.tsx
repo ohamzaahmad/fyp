@@ -40,7 +40,7 @@ const AppTourGuide: React.FC<AppTourGuideProps> = ({ currentView }) => {
       return [
         ...base,
         { target: '[data-tour-nav="schedule"]', content: 'Open your weekly schedule here.', placement: 'right' },
-        { target: '[data-tour="teacher-schedule-page"]', content: 'This is your schedule. Switch days from the top row.', placement: 'top' },
+        { target: '[data-tour="teacher-day-selector"]', content: 'Switch days using the top-row day buttons.', placement: 'bottom' },
         { target: '[data-tour="teacher-download-schedule"]', content: 'Download your weekly schedule as PDF.', placement: 'left' },
         { target: '[data-tour="teacher-adjustment-form"]', content: 'Submit an adjustment request for admin review.', placement: 'left' },
         { target: '[data-tour="teacher-adjustment-requests"]', content: 'View pending and resolved adjustment requests here.', placement: 'bottom' },
@@ -125,7 +125,16 @@ const AppTourGuide: React.FC<AppTourGuideProps> = ({ currentView }) => {
 
   const handleJoyrideCallback = async (data: CallBackProps) => {
     const { status, index, type, action } = data as CallBackProps & { action?: string };
+    const act = String(action);
+
+    // End/skip the tour (user finished or skipped)
     if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
+      setRun(false);
+      try { localStorage.setItem(seenKey, '1'); } catch (_) {}
+      return;
+    }
+    // Some Joyride UI emits explicit actions like 'close' or 'skip' — treat them like skip
+    if (act === 'close' || act === 'skip') {
       setRun(false);
       try { localStorage.setItem(seenKey, '1'); } catch (_) {}
       return;
@@ -165,9 +174,19 @@ const AppTourGuide: React.FC<AppTourGuideProps> = ({ currentView }) => {
       return;
     }
 
-    // After a step completes (user clicked next or Joyride progressed), advance the controlled index
-    if (type === 'step:after' || action === 'next') {
-      const nextIndex = (typeof index === 'number') ? index + 1 : stepIndex + 1;
+    // After a step completes: handle next/prev (Back) navigation correctly
+    if (type === 'step:after') {
+      if (typeof index !== 'number') return;
+
+      // Move backwards when user clicked the Back/Prev control
+      if (act === 'prev' || act === 'back') {
+        const prevIndex = Math.max(index - 1, 0);
+        setStepIndex(prevIndex);
+        return;
+      }
+
+      // Default: advance to next step
+      const nextIndex = index + 1;
       if (nextIndex >= formattedSteps.length) {
         setRun(false);
         try { localStorage.setItem(seenKey, '1'); } catch (_) {}

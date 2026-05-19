@@ -94,7 +94,7 @@ export const BatchObserver: React.FC = () => {
                   data-tour="batch-download-pdf"
                   onClick={downloadTimetable} 
                   disabled={loading}
-                  className="text-xs bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white px-3 py-1.5 rounded text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors"
+                  className="text-xs bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-300 text-white px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors"
                 >
                   <Download className="w-3 h-3" />
                   Download PDF

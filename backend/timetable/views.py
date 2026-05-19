@@ -5,6 +5,7 @@ import re
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, A4
 from reportlab.platypus import Table, TableStyle
+import secrets
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -314,6 +315,50 @@ class FacultyViewSet(viewsets.ModelViewSet):
     queryset = models.Faculty.objects.all().order_by('name')
     serializer_class = serializers.FacultySerializer
 
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [AllowAny()]
+        return [IsAdminUser()]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        User = get_user_model()
+        email = serializer.validated_data.get('email') or ''
+        base_username = 'teacher'
+        if email:
+            base_username = email.split('@')[0]
+        else:
+            name = serializer.validated_data.get('name') or ''
+            if name:
+                base_username = name.split()[0].lower()
+
+        username = base_username
+        i = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{base_username}{i}"
+            i += 1
+
+        temp_password = secrets.token_urlsafe(9)
+        user = User.objects.create(username=username, email=email)
+        user.set_password(temp_password)
+        user.save()
+
+        # Save faculty linked to user and mark must_change_password
+        with transaction.atomic():
+            faculty = serializer.save(user=user, must_change_password=True)
+
+        data = serializers.FacultySerializer(faculty).data
+        # Include the actual username created for the account so the admin can communicate credentials
+        try:
+            data['username'] = user.username
+        except Exception:
+            data['username'] = ''
+        data['temp_password'] = temp_password
+        headers = self.get_success_headers(data)
+        return Response(data, status=status.HTTP_201_CREATED, headers=headers)
+
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         data = self.get_serializer(instance).data
@@ -459,6 +504,35 @@ class ScheduleAdjustmentRequestViewSet(viewsets.ModelViewSet):
                 instance.reviewed_at = timezone.now()
             instance.save(update_fields=['reviewed_by', 'reviewed_at', 'updated_at'])
 
+            # If approved, apply the requested adjustment to the related schedule entry immediately.
+            try:
+                if instance.status == models.ScheduleAdjustmentRequest.STATUS_APPROVED and instance.related_entry:
+                    entry = instance.related_entry
+                    changed = False
+                    # Apply requested day if provided
+                    if instance.requested_day and entry.day_of_week != instance.requested_day:
+                        entry.day_of_week = instance.requested_day
+                        changed = True
+                    # Apply requested time if provided
+                    if instance.requested_time and entry.start_time != instance.requested_time:
+                        entry.start_time = instance.requested_time
+                        changed = True
+                    if changed:
+                        entry.save()
+                        try:
+                            from .sse import emit_analytics_event
+                            data = serializers.ScheduleEntrySerializer(entry).data
+                            emit_analytics_event('entry_updated', f'Adjustment applied for request {instance.id}', data)
+                        except Exception:
+                            pass
+            except Exception:
+                # Don't block review update if applying change fails; log to console for debugging
+                try:
+                    import logging
+                    logging.exception('Failed to apply approved adjustment')
+                except Exception:
+                    pass
+
     def perform_destroy(self, instance):
         instance.delete()
 
@@ -561,6 +635,34 @@ class CurrentUserView(APIView):
         except Exception:
             pass
         return Response(data)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        if not new_password:
+            return Response({'detail': 'New password required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not old_password:
+            return Response({'detail': 'Old password required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not user.check_password(old_password):
+            return Response({'detail': 'Old password incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save()
+
+        try:
+            faculty = models.Faculty.objects.filter(user=user).first()
+            if faculty and faculty.must_change_password:
+                faculty.must_change_password = False
+                faculty.save(update_fields=['must_change_password'])
+        except Exception:
+            pass
+
+        return Response({'detail': 'Password changed successfully.'})
 
 
 class MasterMapView(APIView):
