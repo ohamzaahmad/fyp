@@ -119,7 +119,7 @@ export const LoginPage: React.FC = () => {
              <div className="flex gap-4">
                 <button 
                   data-tour="login-admin-demo"
-                  onClick={() => { setEmail('admin'); setPassword('admin'); }}
+                  onClick={() => { setEmail('hamza'); setPassword('hamza'); }}
                   className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-colors"
                 >
                   Admin Demo
@@ -127,7 +127,7 @@ export const LoginPage: React.FC = () => {
                 <div className="w-[1px] h-3 bg-slate-200 self-center" />
                 <button 
                   data-tour="login-teacher-demo"
-                  onClick={() => { setEmail('seed_teacher'); setPassword('password'); }}
+                  onClick={() => { setEmail('nimra'); setPassword('new'); }}
                   className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-colors"
                 >
                   Teacher Demo
