@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../services/api.ts';
+import api, { createTeacher, updateTeacher } from '../../services/api.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { Teacher, Department, Course } from '../../types.ts';
 import { useData } from '../../context/DataContext.tsx';
@@ -60,6 +60,7 @@ const Teachers: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [form, setForm] = useState<Teacher>(initial as Teacher);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [tempCredentials, setTempCredentials] = useState<{ username: string; password: string } | null>(null);
   const toast = useToast();
 
   const data = useData();
@@ -86,11 +87,15 @@ const Teachers: React.FC = () => {
     }
     try {
       if (editingId) {
-        await api.patch(`/faculties/${editingId}/`, form);
+        await updateTeacher(editingId, form);
         toast.show('Teacher updated', 'success');
       } else {
-        await api.post('/faculties/', form);
+        const res = await createTeacher(form);
         toast.show('Teacher created', 'success');
+        // If backend returned temporary credentials, display them to the admin
+        if (res && (res.temp_password || res.username)) {
+          setTempCredentials({ username: res.username || '', password: res.temp_password || '' });
+        }
       }
       setForm(initial as Teacher);
       setEditingId(null);
@@ -157,7 +162,7 @@ const Teachers: React.FC = () => {
             </div>
 
               <div className="mt-3">
-                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest flex items-center justify-between">
                   Preferred Times
                   <span className="text-[9px] font-normal text-slate-400 normal-case">Algorithm will prioritize these slots based on Tier</span>
                 </label>
@@ -196,6 +201,24 @@ const Teachers: React.FC = () => {
           {editingId && <button onClick={() => { setEditingId(null); setForm(initial as Teacher); }} className="px-4 py-2 border bg-white rounded font-medium">Cancel</button>}
           <button onClick={submit} className="px-6 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">{editingId ? 'Save Changes' : 'Create Teacher'}</button>
         </div>
+        {tempCredentials && (
+          <div className="mt-4 p-4 rounded-lg border border-amber-200 bg-amber-50">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-sm font-bold mb-1">Temporary account created</div>
+                <div className="text-xs text-slate-600">Share these credentials securely with the teacher and instruct them to change password on first login.</div>
+                <div className="mt-2 text-sm font-mono bg-white p-2 rounded border border-slate-100">
+                  <div>Username: <span className="font-bold">{tempCredentials.username}</span></div>
+                  <div>Password: <span className="font-bold">{tempCredentials.password}</span></div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 ml-4">
+                <button onClick={async () => { try { await navigator.clipboard.writeText(`Username: ${tempCredentials.username}\nPassword: ${tempCredentials.password}`); toast.show('Credentials copied to clipboard', 'success'); } catch (e) { toast.show('Copy failed', 'error'); } }} className="px-3 py-2 bg-slate-900 text-white rounded font-bold">Copy</button>
+                <button onClick={() => setTempCredentials(null)} className="px-3 py-2 border rounded font-bold">Dismiss</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded border overflow-hidden">

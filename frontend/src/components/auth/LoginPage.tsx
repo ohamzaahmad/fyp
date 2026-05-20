@@ -71,7 +71,7 @@ export const LoginPage: React.FC = () => {
             )}
           </AnimatePresence>
 
-          <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+          <form onSubmit={handleSubmit} className="space-y-6 relative z-10" data-tour="login-form">
             <div>
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Username</label>
               <div className="relative">
@@ -101,6 +101,7 @@ export const LoginPage: React.FC = () => {
             <button 
               type="submit"
               disabled={isLoading}
+              data-tour="login-signin"
               className="w-full bg-slate-900 text-white rounded-2xl py-4 font-black flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-[0.98] disabled:opacity-50"
             >
               {isLoading ? (
@@ -117,20 +118,22 @@ export const LoginPage: React.FC = () => {
           <div className="mt-8 pt-8 border-t border-slate-50 flex items-center justify-between">
              <div className="flex gap-4">
                 <button 
-                  onClick={() => { setEmail('admin'); setPassword('admin'); }}
+                  data-tour="login-admin-demo"
+                  onClick={() => { setEmail('hamza'); setPassword('hamza'); }}
                   className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-colors"
                 >
                   Admin Demo
                 </button>
                 <div className="w-[1px] h-3 bg-slate-200 self-center" />
                 <button 
-                  onClick={() => { setEmail('seed_teacher'); setPassword('password'); }}
+                  data-tour="login-teacher-demo"
+                  onClick={() => { setEmail('nimra'); setPassword('new'); }}
                   className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-colors"
                 >
                   Teacher Demo
                 </button>
              </div>
-             <button className="text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:text-emerald-600 transition-colors">Forgot Password?</button>
+             <button data-tour="login-forgot-password" className="text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:text-emerald-600 transition-colors">Forgot Password?</button>
           </div>
         </div>
 

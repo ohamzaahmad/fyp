@@ -32,13 +32,14 @@ import { AuthProvider, useAuth } from './context/AuthContext.tsx';
 import { ToastProvider } from './components/ui/Toast.tsx';
 import Settings from './components/settings/Settings.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
+import ChangePassword from './components/auth/ChangePassword.tsx';
 import { ProtectedRoute } from './components/auth/ProtectedRoute.tsx';
 import AppTourGuide from './components/layout/AppTourGuide.tsx';
 
 function AppContent() {
   const { user, isAuthenticated, logout } = useAuth();
   const storedView = (typeof window !== 'undefined') ? localStorage.getItem('nexus_view') : null;
-  const initialView = (storedView === 'dashboard' || storedView === 'timetable' || storedView === 'suggestions' || storedView === 'settings' || storedView === 'export' || storedView === 'schedule' || storedView === 'resources') ? storedView : 'dashboard';
+  const initialView = (storedView === 'dashboard' || storedView === 'timetable' || storedView === 'suggestions' || storedView === 'settings' || storedView === 'export' || storedView === 'schedule' || storedView === 'resources' || storedView === 'change-password') ? storedView : 'dashboard';
   const [state, setState] = useState<AppState>({
     view: initialView,
     zoomLevel: 1.0,
@@ -98,6 +99,13 @@ function AppContent() {
   useEffect(() => {
     if (!isAuthenticated || !user) {
       lastRoleRef.current = null;
+      return;
+    }
+
+    // If the backend indicates the user must change password on first login,
+    // force the app to show the change-password view.
+    if ((user as any).mustChangePassword) {
+      setState(prev => ({ ...prev, view: 'change-password' }));
       return;
     }
 
@@ -261,6 +269,13 @@ function AppContent() {
                 {state.view === 'settings' && (
                   <ProtectedRoute allowedRoles={['ADMIN']}>
                     <Settings />
+                  </ProtectedRoute>
+                )}
+                {state.view === 'change-password' && (
+                  <ProtectedRoute>
+                    <div className="p-8">
+                      <ChangePassword />
+                    </div>
                   </ProtectedRoute>
                 )}
                 {state.view === 'export' && (

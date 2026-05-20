@@ -75,7 +75,8 @@ class ScheduleAdjustmentRequestSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'teacher', 'teacher_name', 'teacher_email', 'status', 'admin_notes', 'reviewed_by', 'reviewed_at', 'created_at', 'updated_at']
+        # Allow admins to update `status` (approve/reject). Other fields remain read-only.
+        read_only_fields = ['id', 'teacher', 'teacher_name', 'teacher_email', 'admin_notes', 'reviewed_by', 'reviewed_at', 'created_at', 'updated_at']
 
 
 class CourseAssignmentSerializer(serializers.ModelSerializer):

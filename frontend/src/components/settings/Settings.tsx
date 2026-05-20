@@ -115,6 +115,7 @@ export const Settings: React.FC = () => {
             <button 
               onClick={handleSave} 
               disabled={saving} 
+              data-tour="settings-save-changes"
               className="flex items-center gap-2 px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-50"
             >
               <Save className="w-4 h-4" />

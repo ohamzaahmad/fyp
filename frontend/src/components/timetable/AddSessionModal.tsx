@@ -232,7 +232,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
             className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+            <div data-tour="modal-header" className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
               <div>
                 <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Timetable</p>
                 <h2 className="text-lg font-black text-slate-900 tracking-tight">
@@ -247,6 +247,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
               </div>
               <button
                 onClick={onClose}
+                data-tour="modal-close"
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
               >
                 <X className="w-4 h-4" />
@@ -262,6 +263,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
                 <select
                   value={assignmentId}
                   onChange={e => setAssignmentId(e.target.value)}
+                  data-tour="modal-assignment"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-900 bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none appearance-none cursor-pointer"
                   required
                 >
@@ -303,6 +305,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
                 <select
                   value={String(roomId)}
                   onChange={e => setRoomId(e.target.value)}
+                  data-tour="modal-room"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-900 bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none appearance-none cursor-pointer"
                   required
                 >
@@ -320,7 +323,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
                   Time Slot <span className="text-rose-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div data-tour="modal-timeslots" className="grid grid-cols-3 gap-1.5">
                   {TIME_SLOTS.filter(s => s !== 'Break').map((slot, idx) => {
                     const parts = slot.split('-').map(p => p.trim());
                     const parse = (t: string) => {
@@ -355,7 +358,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
                   Duration
                 </label>
-                <div className="flex gap-2">
+                <div data-tour="modal-duration" className="flex gap-2">
                   {DURATIONS.map(d => (
                     <button
                       key={d}
@@ -377,7 +380,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
               {/* Live Conflict Preview */}
               <AnimatePresence>
                 {hasIssues && (
-                  <motion.div
+                    <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
@@ -389,6 +392,8 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
                         ? 'bg-rose-50 border-rose-200'
                         : 'bg-amber-50 border-amber-200'
                     )}>
+                      {/* Live conflict preview */}
+                      <div data-tour="modal-conflict-preview">
                       <div className="flex items-center gap-2 mb-2">
                         {isMergeCandidate && criticalConflicts.length === 0 ? (
                           <>
@@ -426,6 +431,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
                         </p>
                       )}
                     </div>
+                    </div>
                   </motion.div>
                 )}
                 {!hasIssues && assignmentId && startTime && roomId && (
@@ -461,6 +467,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
                   <button
                     type="button"
                     onClick={handleDelete}
+                    data-tour="modal-delete"
                     disabled={isDeleting}
                     className="flex-1 py-2.5 rounded-xl border border-rose-200 text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors"
                   >
@@ -476,6 +483,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
                       ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                       : 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm hover:shadow-emerald-500/30 active:scale-95'
                   )}
+                  data-tour="modal-submit"
                 >
                   {isSubmitting ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> {editSession ? 'Updating...' : 'Adding...'}</>

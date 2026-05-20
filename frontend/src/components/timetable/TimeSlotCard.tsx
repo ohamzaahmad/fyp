@@ -64,6 +64,7 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
     <div
       id={session.id}
       ref={setNodeRef}
+      data-tour="timeslot-card"
       style={style}
       {...listeners}
       {...attributes}
@@ -116,6 +117,7 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
             {user?.role === 'ADMIN' && !session.isLocked && (
               <button
                 onClick={e => { e.stopPropagation(); onEdit?.(session); }}
+                data-tour="timeslot-edit"
                 className="p-0.5 rounded hover:bg-black/5 text-slate-400 hover:text-slate-600 transition-all opacity-0 group-hover/card:opacity-100"
                 title="Edit session"
               >
@@ -126,6 +128,7 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
             {session.isLocked && user?.role === 'ADMIN' && (
               <button
                 onClick={e => { e.stopPropagation(); onToggleLock(session.id); }}
+                data-tour="timeslot-lock"
                 className="p-0.5 rounded hover:bg-black/5 transition-colors"
                 title="Unlock session"
               >
@@ -159,7 +162,7 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
 
       {/* Hover tooltip for conflicts */}
       {hasConflict && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-900 text-white p-3 rounded-xl text-[10px] shadow-2xl opacity-0 group-hover/card:opacity-100 transition-all duration-200 pointer-events-none z-[300] border border-slate-700 origin-bottom scale-95 group-hover/card:scale-100">
+        <div data-tour="timeslot-conflict-tooltip" className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-900 text-white p-3 rounded-xl text-[10px] shadow-2xl opacity-0 group-hover/card:opacity-100 transition-all duration-200 pointer-events-none z-[300] border border-slate-700 origin-bottom scale-95 group-hover/card:scale-100">
           <div className="flex items-center gap-1.5 mb-2">
             <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
             <span className="font-black uppercase tracking-wider text-slate-200">

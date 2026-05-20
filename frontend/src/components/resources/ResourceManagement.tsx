@@ -29,6 +29,7 @@ const ResourceManagement: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setSection(tab.id as any)}
+              data-tour={`resource-tab-${tab.id}`}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-xs font-bold transition-all border border-b-0 ${
                 section === tab.id
                   ? 'bg-slate-50 border-slate-200 text-slate-900'

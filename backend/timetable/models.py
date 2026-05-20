@@ -65,6 +65,7 @@ class Faculty(models.Model):
     email = models.EmailField(unique=True)
     requested_slots = models.JSONField(default=list, blank=True)
     can_teach = models.ManyToManyField(Course, related_name='teachers')
+    must_change_password = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
