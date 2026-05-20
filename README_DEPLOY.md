@@ -27,8 +27,8 @@ Step-by-step: Backend (Render)
    - In service settings, set these env vars (Render UI or `render.yaml`):
      - `DJANGO_SECRET_KEY`: a secure random string (required)
      - `DJANGO_DEBUG`: `False`
-     - `DJANGO_ALLOWED_HOSTS`: your domain(s), comma-separated (example: `your-app.onrender.com`)
-     - `DJANGO_CSRF_TRUSTED_ORIGINS`: set to `https://your-app.onrender.com` (optional)
+   - `DJANGO_ALLOWED_HOSTS`: `fyp-brkr.onrender.com`
+   - `DJANGO_CSRF_TRUSTED_ORIGINS`: `https://fyp-brkr.onrender.com`
      - `DATABASE_URL`: Render Postgres `DATABASE_URL` (Render usually sets this automatically)
      - `REDIS_URL`: the Redis add-on URL (required if you use Redis for Celery)
      - Optional tuning: `GUNICORN_WORKERS` (default 2), `DJANGO_SECURE_SSL_REDIRECT` (True)
@@ -68,7 +68,7 @@ Step-by-step: Frontend (Vercel)
 
 3. Environment variables
    - The frontend expects `VITE_API_URL` (also respects localStorage key `nexus_api_base`). In Vercel set:
-     - `VITE_API_URL` = `https://your-backend.onrender.com/api` (adjust path as needed)
+   - `VITE_API_URL` = `https://fyp-brkr.onrender.com/api`
 
 4. Deploy and verify
    - Deploy the Vercel project. After deployment, visit the site and test login using the superuser created on the backend.

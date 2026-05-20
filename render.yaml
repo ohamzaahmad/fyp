@@ -6,13 +6,16 @@ services:
     name: nexustime-backend
     env: docker
     dockerfilePath: backend/Dockerfile
-    branch: main
+    branch: development
     plan: starter
     startCommand: ./start.sh
     envVars:
       - key: DJANGO_SECRET_KEY
       - key: DJANGO_DEBUG
       - key: DJANGO_ALLOWED_HOSTS
+        value: fyp-brkr.onrender.com
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: https://fyp-brkr.onrender.com
       - key: POSTGRES_HOST
       - key: POSTGRES_DB
       - key: POSTGRES_USER
@@ -30,7 +33,7 @@ services:
     name: nexustime-celery
     env: docker
     dockerfilePath: backend/Dockerfile
-    branch: main
+    branch: development
     plan: starter
     startCommand: celery -A nexustime worker --loglevel=INFO --concurrency=${CELERY_CONCURRENCY:-1}
     envVars:
