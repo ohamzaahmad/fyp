@@ -200,10 +200,13 @@ const AppTourGuide: React.FC<AppTourGuideProps> = ({ currentView }) => {
     try {
       if (localStorage.getItem(seenKey) === '1') return;
     } catch (_) {}
-    // auto-start the tour once per role after a small delay
+    // Auto-start the tour only when the user is on the dashboard view.
+    // This avoids the Joyride overlay unintentionally blocking interactive
+    // pages like Suggestions where users need to click action buttons.
+    if (currentView !== 'dashboard') return;
     const timer = window.setTimeout(() => startTour(true), 700);
     return () => window.clearTimeout(timer);
-  }, [seenKey]);
+  }, [seenKey, currentView]);
 
   return (
     <>

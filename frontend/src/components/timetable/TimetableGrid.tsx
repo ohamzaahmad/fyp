@@ -51,6 +51,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
   const DAYS = data?.systemSettings?.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const pixelsPerMinute = MINUTE_WIDTH * zoomLevel;
   const slotRanges = useMemo(() => getSlotRanges(), []);
+  const liveMasterMap = masterMap || data?.masterMap || {};
 
   // Pre-compute cumulative left offsets for each slot (so we don't repeat the loop)
   const slotOffsets = useMemo(() => {
@@ -80,7 +81,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
   );
 
   const displayDepartments = useMemo(() => {
-    const mm = data?.masterMap || masterMap || {};
+    const mm = liveMasterMap;
     return Object.values(mm).map(d => ({
       id: d.id,
       name: d.name,
@@ -90,13 +91,47 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
         rooms: Object.values(f.rooms || {})
       }))
     }));
-  }, [masterMap, data?.masterMap]);
+  }, [liveMasterMap]);
 
   React.useEffect(() => {
-    if (!data?.masterMap || Object.keys(data.masterMap).length === 0) {
+    if (!liveMasterMap || Object.keys(liveMasterMap).length === 0) {
       data?.refreshMasterMap?.();
     }
-  }, []);
+  }, [liveMasterMap, data]);
+
+  // Listen for a jump request from other pages (Suggestions locate). When
+  // `localStorage.nexus_jump_to_session` is set, scroll the matching element
+  // into view and briefly highlight it.
+  React.useEffect(() => {
+    const attemptJump = () => {
+      try {
+        const jump = typeof window !== 'undefined' ? localStorage.getItem('nexus_jump_to_session') : null;
+        if (!jump) return;
+        // Remove it immediately so repeated clicks behave idempotently
+        localStorage.removeItem('nexus_jump_to_session');
+        setTimeout(() => {
+          const el = document.getElementById(String(jump));
+          if (!el) return;
+          // Smooth scroll and temporary highlight
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-4', 'ring-emerald-400', 'rounded-md');
+          setTimeout(() => {
+            el.classList.remove('ring-4', 'ring-emerald-400', 'rounded-md');
+          }, 3500);
+        }, 160);
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    // Try once on mount and also when classes/masterMap update
+    attemptJump();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'nexus_jump_to_session') attemptJump();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [classes, liveMasterMap, data]);
 
   const toast = useToast();
 

@@ -29,7 +29,7 @@ import { useNexusTimetable } from './hooks/useNexusTimetable.ts';
 import { cn } from './lib/utils.ts';
 
 import { AuthProvider, useAuth } from './context/AuthContext.tsx';
-import { ToastProvider } from './components/ui/Toast.tsx';
+import { ToastProvider, useToast } from './components/ui/Toast.tsx';
 import Settings from './components/settings/Settings.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
 import ChangePassword from './components/auth/ChangePassword.tsx';
@@ -38,8 +38,9 @@ import AppTourGuide from './components/layout/AppTourGuide.tsx';
 
 function AppContent() {
   const { user, isAuthenticated, logout } = useAuth();
+  const toast = useToast();
   const storedView = (typeof window !== 'undefined') ? localStorage.getItem('nexus_view') : null;
-  const initialView = (storedView === 'dashboard' || storedView === 'timetable' || storedView === 'suggestions' || storedView === 'settings' || storedView === 'export' || storedView === 'schedule' || storedView === 'resources' || storedView === 'change-password') ? storedView : 'dashboard';
+  const initialView: AppState['view'] = (storedView === 'dashboard' || storedView === 'timetable' || storedView === 'suggestions' || storedView === 'settings' || storedView === 'export' || storedView === 'schedule' || storedView === 'resources' || storedView === 'change-password') ? storedView : 'dashboard';
   const [state, setState] = useState<AppState>({
     view: initialView,
     zoomLevel: 1.0,
@@ -59,6 +60,23 @@ function AppContent() {
     const openSettings = () => setState(prev => ({ ...prev, view: 'settings' }));
     window.addEventListener('nexus:open-settings', openSettings as EventListener);
     return () => window.removeEventListener('nexus:open-settings', openSettings as EventListener);
+  }, []);
+
+  // Listen for jump-to-session events (e.g. from Suggestions or tooltips)
+  useEffect(() => {
+    const handleJump = (e: Event) => {
+      // Switch to the timetable view so TimetableGrid can consume the jump key
+      setState(prev => ({ ...prev, view: 'timetable' }));
+      const detail = (e as CustomEvent)?.detail;
+      const sessionId = detail?.sessionId || localStorage.getItem('nexus_jump_to_session');
+      try {
+        toast?.show?.(`Opening Timetable and locating ${sessionId || 'session...'}`, 'info');
+      } catch (err) {
+        // ignore
+      }
+    };
+    window.addEventListener('nexus:jump-to-session', handleJump as EventListener);
+    return () => window.removeEventListener('nexus:jump-to-session', handleJump as EventListener);
   }, []);
 
   // persist current view so browser refresh restores the same page
@@ -83,6 +101,22 @@ function AppContent() {
     }
   }, [allSessions, masterMap]);
 
+  useEffect(() => {
+    const appName = data?.systemSettings?.app_name || 'UniScheduler';
+    const orgName = data?.systemSettings?.org_name || '';
+    document.title = orgName ? `${appName} | ${orgName}` : appName;
+
+    const faviconHref = data?.systemSettings?.logo_url || '/favicon.png';
+    let iconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!iconLink) {
+      iconLink = document.createElement('link');
+      iconLink.rel = 'icon';
+      document.head.appendChild(iconLink);
+    }
+    iconLink.type = 'image/png';
+    iconLink.href = faviconHref;
+  }, [data?.systemSettings?.app_name, data?.systemSettings?.org_name, data?.systemSettings?.logo_url]);
+
   // Sync masterMap from DataProvider when available
   useEffect(() => {
     if (data?.masterMap && Object.keys(data.masterMap).length > 0) {
@@ -105,7 +139,7 @@ function AppContent() {
     // If the backend indicates the user must change password on first login,
     // force the app to show the change-password view.
     if ((user as any).mustChangePassword) {
-      setState(prev => ({ ...prev, view: 'change-password' }));
+      setState(prev => ({ ...prev, view: 'change-password' as AppState['view'] }));
       return;
     }
 
@@ -131,11 +165,101 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const toggleLock = (id: string) => {
+  const toggleLock = async (id: string) => {
+    const current = state.classes.find(c => c.id === id);
+    if (!current) return;
+
+    const nextLocked = !current.isLocked;
+
+    const updateSessionLock = (session: ClassSession) => (
+      session.id === id ? { ...session, isLocked: nextLocked } : session
+    );
+
+    const nextMasterMap = state.masterMap
+      ? Object.fromEntries(
+          Object.entries(state.masterMap).map(([deptId, dept]: [string, any]) => [
+            deptId,
+            {
+              ...dept,
+              floors: Object.fromEntries(
+                Object.entries(dept.floors || {}).map(([floorId, floor]: [string, any]) => [
+                  floorId,
+                  {
+                    ...floor,
+                    rooms: Object.fromEntries(
+                      Object.entries(floor.rooms || {}).map(([roomId, room]: [string, any]) => [
+                        roomId,
+                        {
+                          ...room,
+                          days: Object.fromEntries(
+                            Object.entries(room.days || {}).map(([day, sessions]: [string, any]) => [
+                              day,
+                              Array.isArray(sessions) ? sessions.map(updateSessionLock) : sessions
+                            ])
+                          )
+                        }
+                      ])
+                    )
+                  }
+                ])
+              )
+            }
+          ])
+        )
+      : state.masterMap;
+
     setState(prev => ({
       ...prev,
-      classes: prev.classes.map(c => c.id === id ? { ...c, isLocked: !c.isLocked } : c)
+      classes: prev.classes.map(c => c.id === id ? { ...c, isLocked: nextLocked } : c),
+      masterMap: nextMasterMap
     }));
+
+    try {
+      await api.updateEntry(id, {
+        isLocked: nextLocked,
+        is_locked: nextLocked,
+      });
+    } catch (err) {
+      console.warn('Failed to persist lock state', err);
+      setState(prev => ({
+        ...prev,
+        classes: prev.classes.map(c => c.id === id ? { ...c, isLocked: current.isLocked } : c),
+        masterMap: prev.masterMap
+          ? Object.fromEntries(
+              Object.entries(prev.masterMap).map(([deptId, dept]: [string, any]) => [
+                deptId,
+                {
+                  ...dept,
+                  floors: Object.fromEntries(
+                    Object.entries(dept.floors || {}).map(([floorId, floor]: [string, any]) => [
+                      floorId,
+                      {
+                        ...floor,
+                        rooms: Object.fromEntries(
+                          Object.entries(floor.rooms || {}).map(([roomId, room]: [string, any]) => [
+                            roomId,
+                            {
+                              ...room,
+                              days: Object.fromEntries(
+                                Object.entries(room.days || {}).map(([day, sessions]: [string, any]) => [
+                                  day,
+                                  Array.isArray(sessions)
+                                    ? sessions.map((session: ClassSession) => session.id === id ? { ...session, isLocked: current.isLocked } : session)
+                                    : sessions
+                                ])
+                              )
+                            }
+                          ])
+                        )
+                      }
+                    ])
+                  )
+                }
+              ])
+            )
+          : prev.masterMap
+      }));
+    }
   };
 
   const toggleBuilding = (id: string) => {
@@ -241,7 +365,7 @@ function AppContent() {
                       collapsedBuildings={collapsedBuildings}
                       onToggleBuilding={toggleBuilding}
                       masterMap={state.masterMap}
-                      selectedDay={state.selectedDay}
+                      selectedDay={state.selectedDay ?? 'Mon'}
                       onDayChange={(day) => setState(prev => ({ ...prev, selectedDay: day }))}
                     />
                   </ProtectedRoute>

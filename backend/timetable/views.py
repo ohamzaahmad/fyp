@@ -492,9 +492,30 @@ class ScheduleAdjustmentRequestViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         faculty = models.Faculty.objects.filter(user=user).first()
-        if not faculty:
-            raise PermissionDenied('Only teacher accounts can submit adjustment requests.')
-        serializer.save(teacher=faculty)
+        if faculty:
+            # Normal teacher flow: attach the faculty record
+            serializer.save(teacher=faculty)
+            return
+
+        # Allow staff/admin users to create an adjustment request for a specific entry
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            related_entry_id = self.request.data.get('related_entry')
+            if related_entry_id:
+                try:
+                    entry_pk = int(str(related_entry_id).replace('entry-', ''))
+                    entry = models.ScheduleEntry.objects.select_related('assignment__teacher').get(pk=entry_pk)
+                    target_teacher = getattr(entry.assignment, 'teacher', None)
+                    if not target_teacher:
+                        raise PermissionDenied('Related entry has no assigned teacher.')
+                    serializer.save(teacher=target_teacher)
+                    return
+                except models.ScheduleEntry.DoesNotExist:
+                    raise PermissionDenied('Related entry not found for admin-created adjustment request.')
+                except Exception:
+                    raise PermissionDenied('Unable to create adjustment request on behalf of teacher.')
+
+        # Fallback: deny
+        raise PermissionDenied('Only teacher accounts can submit adjustment requests.')
 
     def perform_update(self, serializer):
         instance = serializer.save()

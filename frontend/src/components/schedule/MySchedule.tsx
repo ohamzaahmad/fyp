@@ -367,6 +367,11 @@ export const MySchedule: React.FC = () => {
                        <span className="text-[10px] font-black uppercase">On Time</span>
                     </div>
                   </div>
+
+                  <div className="flex items-center gap-2 mb-3 text-slate-500 text-xs font-semibold uppercase tracking-widest">
+                    <User className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>{selectedTeacher?.name || user?.name || 'Teacher'}</span>
+                  </div>
                   
                   <h3 className="text-xl font-black text-slate-800 mb-6 leading-tight">{session.subjectName || session.subjectCode || 'Untitled Course'}</h3>
                   
