@@ -168,6 +168,24 @@ export const Dashboard: React.FC = () => {
           scheduleTokenRefresh(token);
         };
 
+        // throttle summary refreshes triggered from SSE to avoid excessive API calls
+        let lastSummaryFetch = 0;
+        let scheduledSummaryTimer: number | null = null;
+
+        const scheduleSummaryFetch = (delayMs: number) => {
+          if (scheduledSummaryTimer) return;
+          scheduledSummaryTimer = window.setTimeout(async () => {
+            scheduledSummaryTimer = null;
+            try {
+              const s = await getAnalyticsSummaryWithParams({ bucket_minutes: bucketMinutes });
+              setSummary(s || null);
+              setLoadData(s?.load_distribution || null);
+            } catch (e) {
+              // ignore
+            }
+          }, delayMs) as unknown as number;
+        };
+
         es.onmessage = async (evt) => {
           try {
             const data = JSON.parse(evt.data);
@@ -180,9 +198,18 @@ export const Dashboard: React.FC = () => {
               return next.slice(-limit);
             });
             try {
-              const s = await getAnalyticsSummaryWithParams({ bucket_minutes: bucketMinutes });
-              setSummary(s || null);
-              setLoadData(s?.load_distribution || null);
+              const now = Date.now();
+              const MIN_INTERVAL = 5000; // ms
+              if (now - lastSummaryFetch > MIN_INTERVAL) {
+                lastSummaryFetch = now;
+                const s = await getAnalyticsSummaryWithParams({ bucket_minutes: bucketMinutes });
+                setSummary(s || null);
+                setLoadData(s?.load_distribution || null);
+              } else {
+                // schedule one delayed fetch to consolidate rapid messages
+                const remaining = Math.max(0, MIN_INTERVAL - (now - lastSummaryFetch));
+                scheduleSummaryFetch(remaining + 50);
+              }
             } catch (e) {
               // ignore summary refresh errors
             }

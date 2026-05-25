@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import * as api from '../services/api.ts';
 import { Department, Teacher, ClassSession, MasterMap, Room, Course, Batch, CourseAssignment } from '../types.ts';
+import { normalizeSession } from '../lib/utils.ts';
 import { useAuth } from './AuthContext.tsx';
 
 type DataContextType = {
@@ -157,10 +158,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             Object.values(floor.rooms).forEach((room: any) => {
               if (room.days) {
                 Object.values(room.days).forEach((daySessions: any) => {
-                  derived.push(...(daySessions || []));
+                  (daySessions || []).forEach((s: any) => derived.push(normalizeSession(s)));
                 });
               } else if (room.sessions) {
-                derived.push(...(room.sessions || []));
+                (room.sessions || []).forEach((s: any) => derived.push(normalizeSession(s)));
               }
             });
           });

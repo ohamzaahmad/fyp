@@ -4,7 +4,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { ClassSession, Teacher } from '../../types.ts';
 import { useData } from '../../context/DataContext.tsx';
 import { cn } from '../../lib/utils.ts';
-import { AlertTriangle, GitMerge, Lock, Pencil } from 'lucide-react';
+import { AlertTriangle, GitMerge, Lock, LockOpen, Pencil, X as XIcon, ArrowRight } from 'lucide-react';
+import { normalizeTeacherId, normalizeDay } from '../../lib/utils.ts';
+import { unmergeEntries } from '../../services/api.ts';
 import { motion } from 'motion/react';
 import { useAuth } from '../../context/AuthContext.tsx';
 
@@ -33,8 +35,10 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
     disabled: session.isLocked
   });
 
-  const teacherId = session.teacherId || session.facultyId;
-  const teacher = data?.teachers.find(t => String(t.id) === String(teacherId));
+  const teacherId = String(session.teacherId || session.facultyId || '').replace(/^faculty-/, '');
+  const teacher = teacherId
+    ? data?.teachers.find(t => String(t.id) === teacherId)
+    : null;
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -113,6 +117,40 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
                 <GitMerge className="w-2.5 h-2.5 text-indigo-600" />
               </div>
             )}
+            {/* Lock state is always visible so admins can tell if the slot is protected */}
+            {user?.role === 'ADMIN' ? (
+              <button
+                onClick={e => { e.stopPropagation(); onToggleLock(session.id); }}
+                data-tour="timeslot-lock"
+                className={cn(
+                  'p-0.5 rounded transition-colors',
+                  session.isLocked ? 'hover:bg-rose-50 text-rose-500' : 'hover:bg-emerald-50 text-emerald-500'
+                )}
+                title={session.isLocked ? 'Unlock session' : 'Lock session'}
+                aria-label={session.isLocked ? 'Unlock session' : 'Lock session'}
+              >
+                {session.isLocked ? (
+                  <Lock className="w-2.5 h-2.5" />
+                ) : (
+                  <LockOpen className="w-2.5 h-2.5" />
+                )}
+              </button>
+            ) : (
+              <div
+                className={cn(
+                  'p-0.5 rounded',
+                  session.isLocked ? 'text-slate-400' : 'text-emerald-400'
+                )}
+                title={session.isLocked ? 'Locked session' : 'Unlocked session'}
+                aria-label={session.isLocked ? 'Locked session' : 'Unlocked session'}
+              >
+                {session.isLocked ? (
+                  <Lock className="w-2.5 h-2.5" />
+                ) : (
+                  <LockOpen className="w-2.5 h-2.5" />
+                )}
+              </div>
+            )}
             {/* Edit button — only for admins */}
             {user?.role === 'ADMIN' && !session.isLocked && (
               <button
@@ -123,20 +161,6 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
               >
                 <Pencil className="w-2.5 h-2.5" />
               </button>
-            )}
-            {/* Lock — only admins see the toggle; everyone sees the lock icon if locked */}
-            {session.isLocked && user?.role === 'ADMIN' && (
-              <button
-                onClick={e => { e.stopPropagation(); onToggleLock(session.id); }}
-                data-tour="timeslot-lock"
-                className="p-0.5 rounded hover:bg-black/5 transition-colors"
-                title="Unlock session"
-              >
-                <Lock className="w-2.5 h-2.5 text-slate-400" />
-              </button>
-            )}
-            {session.isLocked && user?.role !== 'ADMIN' && (
-              <Lock className="w-2.5 h-2.5 text-slate-300" />
             )}
           </div>
         </div>
@@ -151,8 +175,11 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
             )}>
               {session.batchId}
             </div>
-            {zoomLevel >= 0.9 && teacher && (
-              <div className="text-[8px] text-slate-400 truncate font-medium italic">
+            {teacher && (
+              <div className={cn(
+                'truncate font-medium italic text-slate-400',
+                zoomLevel < 0.8 ? 'text-[7px]' : 'text-[8px]'
+              )}>
                 {teacher.name}
               </div>
             )}
@@ -162,7 +189,7 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
 
       {/* Hover tooltip for conflicts */}
       {hasConflict && (
-        <div data-tour="timeslot-conflict-tooltip" className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-900 text-white p-3 rounded-xl text-[10px] shadow-2xl opacity-0 group-hover/card:opacity-100 transition-all duration-200 pointer-events-none z-[300] border border-slate-700 origin-bottom scale-95 group-hover/card:scale-100">
+        <div data-tour="timeslot-conflict-tooltip" className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-900 text-white p-3 rounded-xl text-[10px] shadow-2xl opacity-0 group-hover/card:opacity-100 transition-all duration-200 pointer-events-auto z-[300] border border-slate-700 origin-bottom scale-95 group-hover/card:scale-100">
           <div className="flex items-center gap-1.5 mb-2">
             <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
             <span className="font-black uppercase tracking-wider text-slate-200">
@@ -184,6 +211,42 @@ export const TimeSlotCard: React.FC<TimeSlotCardProps> = ({
                 </span>
               </div>
             ))}
+            {/* Show merged partners for this session */}
+            {(() => {
+              const myTeacher = normalizeTeacherId(session.teacherId ?? session.facultyId ?? '');
+              const myDay = normalizeDay(session.day_of_week ?? (session as any).dayOfWeek ?? '');
+              const mergedPartners = (data?.sessions || []).filter(s => s.isMerged && s.id !== session.id && s.subjectCode === session.subjectCode && normalizeTeacherId(s.teacherId ?? s.facultyId ?? '') === myTeacher && normalizeDay(s.day_of_week ?? (s as any).dayOfWeek) === myDay);
+              if (mergedPartners.length === 0) return null;
+              return (
+                <div className="mt-2 pt-2 border-t border-slate-700">
+                  <div className="text-[10px] text-indigo-300 font-black uppercase tracking-widest mb-1">Merged With</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {mergedPartners.map(p => (
+                      <div key={p.id} className="flex items-center gap-2 px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-[11px] font-bold">
+                        <span>{p.batchId}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); localStorage.setItem('nexus_jump_to_session', p.id); try { window.dispatchEvent(new CustomEvent('nexus:jump-to-session', { detail: { sessionId: p.id } })); } catch (err) {} }}
+                          title="Locate in Grid"
+                          className="p-0.5 text-indigo-600 hover:text-indigo-800"
+                        >
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {user?.role === 'ADMIN' && (
+                    <div className="mt-2">
+                      <button
+                        onClick={async (e) => { e.stopPropagation(); const ids = [session.id, ...mergedPartners.map(p => p.id)]; try { await unmergeEntries(ids); await data?.refreshMasterMap?.(); } catch (err) { console.warn('unmerge failed', err); } }}
+                        className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-white border rounded text-[12px] font-bold text-rose-600 hover:bg-rose-50"
+                      >
+                        <XIcon className="w-3 h-3" /> Unmerge
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           {isMergeCandidate && !hasCritical && (
             <p className="mt-2 pt-2 border-t border-slate-700 text-[9px] text-amber-400 font-medium">

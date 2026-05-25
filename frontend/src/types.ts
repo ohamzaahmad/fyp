@@ -125,10 +125,10 @@ export interface SystemConfiguration {
 }
 
 export interface AppState {
-  view: 'dashboard' | 'timetable' | 'suggestions' | 'settings' | 'export' | 'schedule' | 'resources';
+  view: 'dashboard' | 'timetable' | 'suggestions' | 'settings' | 'export' | 'schedule' | 'resources' | 'change-password';
   zoomLevel: number;
   selectedDepartments: number[];
   classes: ClassSession[];
   masterMap?: MasterMap;
-  selectedDay?: string;
+  selectedDay: string;
 }

@@ -78,6 +78,12 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
     return { startSlotIdx, colSpan: Math.max(1, span) };
   };
 
+  const getTeacher = (session: any) => {
+    const teacherRef = String(session?.teacherId || session?.facultyId || '').replace(/^faculty-/, '');
+    if (!teacherRef) return null;
+    return data?.teachers.find((teacher: Teacher) => String(teacher.id) === teacherRef) || null;
+  };
+
   return (
     <div className="bg-white p-8 font-sans print:p-0 print:m-0" id="uaf-print-body">
       <style dangerouslySetInnerHTML={{ __html: `
@@ -147,15 +153,15 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {DAYS.map(day => {
+                      <tbody>
+                        {DAYS.map((day: string) => {
                   // Only include rooms that actually have sessions on this day to save space,
                   // or include all rooms if preferred. We'll include all to maintain structure.
                   const roomsWithData = rooms.filter(r => r.days && r.days[day] && r.days[day].length > 0);
                   // If no rooms have classes on this day, we can skip the day entirely to save paper.
                   if (roomsWithData.length === 0) return null;
 
-                  return roomsWithData.map((room, rIdx) => {
+                  return roomsWithData.map((room: any, rIdx: number) => {
                     const slotMap: Record<number, { session: any; colSpan: number; isStart: boolean }> = {};
                     
                     // Highly optimized: fetch directly from the nested hierarchy
@@ -173,9 +179,6 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
                         }
                       }
                     });
-
-                    const teacher = (session: any) =>
-                      session ? data?.teachers.find((t: Teacher) => String(t.id) === String(session.teacherId || session.facultyId)) : null;
 
                     return (
                       <tr key={`${day}-${room.id}`} className="border-b border-black">
@@ -198,7 +201,7 @@ export const TimetablePrintView: React.FC<TimetablePrintViewProps> = ({ classes 
                           }
 
                           const { session, colSpan } = entry;
-                          const t = teacher(session);
+                          const t = getTeacher(session);
                           return (
                             <td key={sIdx} colSpan={colSpan} className="border border-black p-1 text-center align-middle">
                               <div className="flex flex-col items-center justify-center gap-0.5 leading-[1.1]">

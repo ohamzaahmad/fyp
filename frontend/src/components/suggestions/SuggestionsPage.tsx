@@ -8,7 +8,8 @@ import { useToast } from '../ui/Toast.tsx';
 import { BatchAnalysis } from './BatchAnalysis.tsx';
 import { useData } from '../../context/DataContext.tsx';
 import { checkConflicts, findMergeCandidates } from '../../services/timetableLogic.ts';
-import { mergeEntries } from '../../services/api.ts';
+import { normalizeTeacherId, normalizeDay } from '../../lib/utils.ts';
+import { mergeEntries, unmergeEntries, createAdjustmentRequest, fetchEntries, generateSchedule } from '../../services/api.ts';
 import { ClassSession } from '../../types.ts';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -43,15 +44,18 @@ export const SuggestionsPage: React.FC = () => {
   const sessions: ClassSession[] = data?.sessions || [];
   const teachers = data?.teachers || [];
 
+  // Debug: surface session counts and sample
+  console.debug('SuggestionsPage sessions count', sessions.length, sessions.slice(0,3));
+
   // ── Derive merge candidates from live sessions ─────────────────────────
   const mergeGroups = useMemo((): MergeGroup[] => {
     const groups = new Map<string, ClassSession[]>();
     sessions.forEach(s => {
       if (s.isMerged) return;
-      const teacherId = (s.teacherId || s.facultyId || '').trim();
+      const teacherId = normalizeTeacherId(s.teacherId ?? s.facultyId ?? '');
       const code = (s.subjectCode || '').trim().toUpperCase();
       const time = (s.startTime || '').trim();
-      const day = (s.day_of_week || '').trim();
+      const day = normalizeDay(s.day_of_week ?? (s as any).dayOfWeek ?? '');
 
       // Group by code, teacher, time and day — only sessions on the same day
       // should be considered merge candidates.
@@ -75,13 +79,17 @@ export const SuggestionsPage: React.FC = () => {
       const teacherId = s0.teacherId || s0.facultyId || '';
       const teacher = teachers.find(t => String(t.id) === String(teacherId) || `faculty-${t.id}` === String(teacherId));
       
+      // compute whether sessions all share the same start time
+      const times = Array.from(new Set(grpSessions.map(s => (s.startTime || '').trim()).filter(Boolean))).sort();
+      const isSameTime = times.length === 1;
+
       result.push({
         key,
         subjectCode: s0.subjectCode,
         subjectName: s0.subjectName,
         teacherName: teacher?.name || `Faculty ${teacherId}`,
         sessions: grpSessions,
-        startTime: s0.startTime,
+        startTime: isSameTime ? s0.startTime : `${times.join(' / ')}`,
       });
     });
     return result;
@@ -89,6 +97,7 @@ export const SuggestionsPage: React.FC = () => {
 
   // ── Derive conflicts from live sessions ────────────────────────────────
   const conflicts = useMemo((): ConflictItem[] => {
+    console.debug('Computing conflicts for', sessions.length, 'sessions');
     const seen = new Set<string>();
     const result: ConflictItem[] = [];
     sessions.forEach(session => {
@@ -144,7 +153,13 @@ export const SuggestionsPage: React.FC = () => {
   // ── Resolve conflict (mark dismissed + refresh) ────────────────────────
   const handleResolveConflict = useCallback(async (conflict: ConflictItem) => {
     setResolvedIds(prev => new Set([...prev, conflict.id]));
-    toast.show?.(`Conflict dismissed — go to Timetable to manually adjust ${conflict.sessionCode}`, 'info');
+    try {
+      await createAdjustmentRequest({ related_entry: Number(conflict.sessionId) || undefined, reason: `Dismissed conflict: ${conflict.description}` });
+      toast.show?.(`Conflict dismissed and recorded — go to Timetable to adjust ${conflict.sessionCode}`, 'info');
+    } catch (e: any) {
+      console.warn('Failed to record dismissal', e);
+      toast.show?.(`Conflict dismissed locally (failed to record): ${conflict.sessionCode}`, 'info');
+    }
   }, [toast]);
 
   const handleMergeConflict = async (conflict: ConflictItem) => {
@@ -171,16 +186,27 @@ export const SuggestionsPage: React.FC = () => {
   const handleLocateSession = (sessionId: string) => {
     // We can use a custom event or store a "pending jump" in context/localStorage
     localStorage.setItem('nexus_jump_to_session', sessionId);
-    toast.show?.(`Locating ${sessionId}... Go to Timetable view to see it highlighted.`, 'info');
+    // dispatch an event so the app can switch to the timetable view automatically
+    try {
+      window.dispatchEvent(new CustomEvent('nexus:jump-to-session', { detail: { sessionId } }));
+    } catch (err) {
+      // ignore if custom events aren't supported
+    }
+    toast.show?.(`Locating ${sessionId}... Opening Timetable view.`, 'info');
     // In a real app, we might use routing: navigate('/timetable')
   };
 
   const handleVerifyConflict = async (conflict: ConflictItem) => {
     toast.show?.(`Re-verifying conflict ${conflict.sessionCode}...`, 'info');
-    setTimeout(() => {
-      // Re-run check conflicts logic...
-      toast.show?.(`Conflict still active. Manual intervention required.`, 'error');
-    }, 800);
+    try {
+      // Refresh server state and entries
+      await fetchEntries();
+      await data?.refreshMasterMap?.();
+      toast.show?.(`Re-checked ${conflict.sessionCode}. If still active, please adjust in Timetable.`, 'info');
+    } catch (e: any) {
+      console.warn('Re-verify failed', e);
+      toast.show?.(`Re-verify failed: ${(e?.message) || 'Network error'}`, 'error');
+    }
   };
 
   const handleRefresh = () => {
@@ -203,15 +229,34 @@ export const SuggestionsPage: React.FC = () => {
     }
   };
 
+  const handleUnmergeGroup = useCallback(async (group: MergeGroup) => {
+    setMergingId(`UNMERGE-${group.key}`);
+    try {
+      const ids = group.sessions.map(s => s.id);
+      await unmergeEntries(ids);
+      await data?.refreshMasterMap?.();
+      toast.show?.(`Unmerged ${ids.length} sections`, 'success');
+    } catch (e: any) {
+      toast.show?.('Unmerge failed', 'error');
+    } finally {
+      setMergingId(null);
+    }
+  }, [data, toast]);
+
   const handleAutoFix = async (conflict: ConflictItem) => {
-    // A simple "Auto-Fix" would be to move the session to a time that doesn't conflict.
-    // For now, we'll simulate finding a slot or calling a specialized endpoint.
     toast.show?.(`AI is analyzing available slots for ${conflict.sessionCode}...`, 'info');
-    // Simulate a successful move
-    setTimeout(() => {
-       handleResolveConflict(conflict);
-       toast.show?.(`Automatically moved ${conflict.sessionCode} to a non-conflicting slot.`, 'success');
-    }, 1500);
+    try {
+      // Request backend scheduler to attempt a fix for this entry
+      await generateSchedule({ target_entry: conflict.sessionId, mode: 'preview' });
+      // refresh local view
+      await data?.refreshMasterMap?.();
+      // Optionally mark resolved locally
+      setResolvedIds(prev => new Set([...prev, conflict.id]));
+      toast.show?.(`Auto-Fix requested for ${conflict.sessionCode}. Review Timetable for applied changes.`, 'success');
+    } catch (e: any) {
+      console.warn('Auto-Fix failed', e);
+      toast.show?.(`Auto-Fix failed: ${(e?.message) || 'Server error'}`, 'error');
+    }
   };
 
   return (
@@ -336,7 +381,7 @@ export const SuggestionsPage: React.FC = () => {
                                   )}
                                 </React.Fragment>
                               ))}
-                              <span className="ml-1 text-[10px] text-slate-400 font-medium">→ Combined section</span>
+                              <span className="ml-1 text-[10px] text-slate-400 font-medium">{group.startTime.includes('/') ? '→ Merge Possible' : '→ Merge Ready'}</span>
                             </div>
                           </div>
                         </div>
@@ -347,30 +392,41 @@ export const SuggestionsPage: React.FC = () => {
                             </p>
                             <p className="text-xl font-black text-emerald-600">{group.sessions.length}</p>
                           </div>
-                          <div className="flex flex-col gap-2">
-                            <button
-                              onClick={() => handleApproveMerge(group)}
-                              disabled={mergingId === group.key}
-                              data-tour="suggestions-approve-merge"
-                              className={cn(
-                                'px-6 py-3 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all',
-                                mergingId === group.key
-                                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
-                                  : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20 active:scale-95'
-                              )}
-                            >
-                              {mergingId === group.key
-                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Merging…</>
-                                : <><Check className="w-4 h-4" /> Approve Merge</>}
-                            </button>
-                            <button
-                              onClick={() => handleLocateSession(group.sessions[0].id)}
-                              data-tour="suggestions-locate"
-                              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 transition-colors"
-                            >
-                              Locate in Grid
-                            </button>
-                          </div>
+                            <div className="flex flex-col gap-2">
+                              <button
+                                onClick={() => handleApproveMerge(group)}
+                                disabled={mergingId === group.key}
+                                data-tour="suggestions-approve-merge"
+                                className={cn(
+                                  'px-6 py-3 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all',
+                                  mergingId === group.key
+                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
+                                    : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20 active:scale-95'
+                                )}
+                              >
+                                {mergingId === group.key
+                                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Merging…</>
+                                  : <><Check className="w-4 h-4" /> Approve Merge</>}
+                              </button>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleLocateSession(group.sessions[0].id)}
+                                  data-tour="suggestions-locate"
+                                  className="text-[10px] font-bold text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 transition-colors"
+                                >
+                                  Locate in Grid
+                                </button>
+                                {group.sessions.some(s => s.isMerged) && (
+                                  <button
+                                    onClick={() => handleUnmergeGroup(group)}
+                                    disabled={mergingId === `UNMERGE-${group.key}`}
+                                    className="text-[10px] font-bold text-rose-600 hover:text-rose-700 transition-colors border border-rose-200 bg-rose-50 px-3 py-1.5 rounded-lg"
+                                  >
+                                    {mergingId === `UNMERGE-${group.key}` ? 'Unmerging…' : 'Unmerge'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                         </div>
                       </motion.div>
                     ))}
@@ -490,13 +546,6 @@ export const SuggestionsPage: React.FC = () => {
                                   title="Re-verify"
                                 >
                                   <RefreshCw className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleResolveConflict(conflict)}
-                                  className="text-xs font-bold text-slate-600 hover:text-rose-600 transition-colors border border-slate-200 hover:border-rose-200 hover:bg-rose-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5"
-                                >
-                                  <X className="w-3 h-3" />
-                                  Dismiss
                                 </button>
                               </div>
                             </td>

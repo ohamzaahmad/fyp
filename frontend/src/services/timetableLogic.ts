@@ -16,6 +16,8 @@ export const timeToMinutes = (time: string): number => {
  * they are merge candidates (Warning), not a hard conflict.
  * All other same-room overlaps are Critical conflicts.
  */
+import { normalizeTeacherId, normalizeDay } from '../lib/utils.ts';
+
 export const checkConflicts = (
   target: ClassSession,
   others: ClassSession[],
@@ -39,14 +41,10 @@ export const checkConflicts = (
 
   others.filter(s => s.id !== target.id).forEach(other => {
     // A conflict can only happen if they are on the same day
-    const targetDay = target.day_of_week || (target as any).dayOfWeek;
-    const otherDay = other.day_of_week || (other as any).dayOfWeek;
-    
+    const targetDay = normalizeDay(target.day_of_week ?? (target as any).dayOfWeek);
+    const otherDay = normalizeDay(other.day_of_week ?? (other as any).dayOfWeek);
+
     // Require both `day` fields to be present and equal before evaluating conflicts.
-    // This makes the behavior consistent with `findMergeCandidates()` which also
-    // requires explicit same-day matches. If either session lacks a day, we
-    // don't assume a possible overlap here — conflicts are only meaningful when
-    // both days are known.
     if (!(targetDay && otherDay && targetDay === otherDay)) return;
 
     const otherStart = timeToMinutes(other.startTime);
@@ -54,9 +52,9 @@ export const checkConflicts = (
     const isOverlap = targetStart < otherEnd && otherStart < targetEnd;
     if (!isOverlap) return;
 
-    const sameTeacher =
-      (target.teacherId && other.teacherId && target.teacherId === other.teacherId) ||
-      (target.facultyId && other.facultyId && target.facultyId === other.facultyId);
+    const targetTeacher = normalizeTeacherId(target.teacherId ?? target.facultyId ?? '');
+    const otherTeacher = normalizeTeacherId(other.teacherId ?? other.facultyId ?? '');
+    const sameTeacher = targetTeacher && otherTeacher && targetTeacher === otherTeacher;
     const sameCourse = target.subjectCode === other.subjectCode;
 
     // Room conflict
@@ -92,9 +90,7 @@ export const checkConflicts = (
 
     // Teacher double-booked — only flag if it's a DIFFERENT course
     if (sameTeacher && !sameCourse) {
-      const teacher = teacherPool.find(f =>
-        String(f.id) === String(target.teacherId || target.facultyId)
-      );
+      const teacher = teacherPool.find(f => String(f.id) === String(targetTeacher));
       conflicts.push({
         type: 'Teacher',
         severity: 'Critical',
@@ -142,14 +138,18 @@ export const calculateGaps = (sessions: ClassSession[]) => {
  * Find sessions that are merge candidates (same teacher + same course at same time slot)
  */
 export const findMergeCandidates = (sessions: ClassSession[]) => {
+  // Merge candidates: same teacher, same course, same day — time may differ.
   return sessions.filter((s, i) =>
-    sessions.some((other, j) =>
-      i !== j &&
-      (s.facultyId === other.facultyId || s.teacherId === other.teacherId) &&
-      s.subjectCode === other.subjectCode &&
-      s.startTime === other.startTime &&
-      // Require same day for merge candidates. If either session lacks a day, do not suggest merge.
-      !!(s.day_of_week && other.day_of_week && s.day_of_week === other.day_of_week)
-    )
+    sessions.some((other, j) => {
+      if (i === j) return false;
+      const sTeacher = normalizeTeacherId(s.teacherId ?? s.facultyId ?? '');
+      const oTeacher = normalizeTeacherId(other.teacherId ?? other.facultyId ?? '');
+      const sameTeacher = sTeacher && oTeacher && sTeacher === oTeacher;
+      const sameCourse = s.subjectCode === other.subjectCode;
+      const sDay = normalizeDay(s.day_of_week ?? (s as any).dayOfWeek);
+      const oDay = normalizeDay(other.day_of_week ?? (other as any).dayOfWeek);
+      const sameDay = sDay && oDay && sDay === oDay;
+      return sameTeacher && sameCourse && sameDay;
+    })
   );
 };

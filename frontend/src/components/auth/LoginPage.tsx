@@ -133,7 +133,7 @@ export const LoginPage: React.FC = () => {
                   Teacher Demo
                 </button>
              </div>
-             <button data-tour="login-forgot-password" className="text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:text-emerald-600 transition-colors">Forgot Password?</button>
+             {/* <button data-tour="login-forgot-password" className="text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:text-emerald-600 transition-colors">Forgot Password?</button> */}
           </div>
         </div>
 

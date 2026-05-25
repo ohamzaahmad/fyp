@@ -143,6 +143,12 @@ export const mergeEntries = async (entryIds: string[]): Promise<any> => {
   return response.data;
 };
 
+export const unmergeEntries = async (entryIds: string[]): Promise<any> => {
+  // Backend has no bulk unmerge endpoint; send individual updates to clear is_merged
+  const results = await Promise.all(entryIds.map(id => updateEntry(id, { is_merged: false } as any).catch(e => e)));
+  return results;
+};
+
 
 export const generateSchedule = async (options?: any): Promise<{ status: string; task_id?: string }> => {
   const response = await api.post('/timetable/generate/', options || {});
