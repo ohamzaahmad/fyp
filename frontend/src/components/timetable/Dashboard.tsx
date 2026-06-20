@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { LayoutDashboard, Zap, TrendingUp, Users, Clock, AlertTriangle, CheckCircle2, Scissors } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { getAnalyticsSummaryWithParams, generateSchedule } from '../../services/api.ts';
+import { getAnalyticsSummaryWithParams, generateSchedule, clearTimetable } from '../../services/api.ts';
 import { getStoredToken, refreshToken } from '../../services/authService.ts';
 import { useToast } from '../ui/Toast.tsx';
 
@@ -25,6 +25,7 @@ export const Dashboard: React.FC = () => {
   const [bucketMinutes, setBucketMinutes] = useState<number>(Number(process.env.VITE_ANALYTICS_BUCKET_MINUTES || 60));
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const toast = useToast();
 
   const palette = ['#10b981', '#3b82f6', '#f97316', '#8b5cf6', '#ef4444', '#06b6d4', '#f59e0b', '#84cc16', '#e11d48', '#0ea5a4'];
@@ -368,7 +369,7 @@ export const Dashboard: React.FC = () => {
               System Logs
               <span className="bg-rose-500 text-[8px] px-1.5 py-0.5 rounded ml-2 animate-pulse">Live</span>
             </h3>
-            <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
+            <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar max-h-[560px]">
               {(feed && feed.length > 0 ? feed : logs).map((raw: any, i: number) => {
                 const id = String(raw?.id ?? raw?.pk ?? `log-${i}`);
                 const time = raw?.created_at ? new Date(raw.created_at).toLocaleString() : (raw?.time || '');
@@ -412,7 +413,7 @@ export const Dashboard: React.FC = () => {
                 );
               })}
             </div>
-            <button className="mt-8 w-full border border-slate-700 bg-slate-800/50 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-colors">Clear All Logs</button>
+            <button onClick={() => { setFeed([]); setLogs([]); setAckIds([]); }} className="mt-8 w-full border border-slate-700 bg-slate-800/50 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-colors">Clear All Logs</button>
           </div>
         </div>
 
@@ -448,15 +449,45 @@ export const Dashboard: React.FC = () => {
 
            <div className="bg-white border-2 border-slate-100 p-8 rounded-3xl flex flex-col justify-center">
               <div className="flex items-center gap-4 mb-4">
-                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-500">?</div>
+                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-500">
+                    <Scissors className="w-6 h-6" />
+                 </div>
                  <div>
-                    <h3 className="text-lg font-black text-slate-900 tracking-tight">Need Support?</h3>
-                    <p className="text-sm font-medium text-slate-400">Browse help docs or check server status</p>
+                    <h3 className="text-lg font-black text-slate-900 tracking-tight">Timetable</h3>
+                    <p className="text-sm font-medium text-slate-400">Generate a new timetable or remove the current one</p>
                  </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                 <button className="bg-slate-50 border border-slate-200 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white transition-colors">Docs</button>
-                 <button className="bg-slate-50 border border-slate-200 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white transition-colors">System Status</button>
+                 <button onClick={async () => {
+                    if (running) return;
+                    setRunning(true);
+                    try {
+                      const res = await generateSchedule();
+                      if (res && res.task_id) {
+                        toast.show(`Solver enqueued: ${res.task_id}`, 'success');
+                      } else if (res && res.status) {
+                        toast.show(`Solver started: ${res.status}`, 'info');
+                      } else {
+                        toast.show('Solver request sent', 'info');
+                      }
+                    } catch (e: any) {
+                      toast.show(`Failed to run solver: ${e?.message || String(e)}`, 'error');
+                    } finally {
+                      setRunning(false);
+                    }
+                 }} className="bg-emerald-500 text-white py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 active:scale-95 transition-all">{running ? 'Generating...' : 'Generate'}</button>
+                 <button onClick={async () => {
+                    if (clearing) return;
+                    setClearing(true);
+                    try {
+                      const res = await clearTimetable();
+                      toast.show(`Timetable removed (${res.deleted} entries deleted)`, 'success');
+                    } catch (e: any) {
+                      toast.show(`Failed to clear timetable: ${e?.message || String(e)}`, 'error');
+                    } finally {
+                      setClearing(false);
+                    }
+                 }} className="bg-rose-500 text-white py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-600 active:scale-95 transition-all">{clearing ? 'Removing...' : 'Remove Timetable'}</button>
               </div>
            </div>
         </div>
