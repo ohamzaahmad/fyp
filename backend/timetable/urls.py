@@ -25,6 +25,7 @@ from .views import (
     BulkImportView,
     TimetableMergeView,
     TimetableCompactView,
+    TimetableClearView,
     BatchTimetableExportView,
     ScheduleAdjustmentRequestViewSet,
 )
@@ -62,4 +63,5 @@ urlpatterns = [
     path('timetable/compact/', TimetableCompactView.as_view(), name='timetable-compact'),
     path('timetable/bulk-upload/', BulkImportView.as_view(), name='timetable-bulk-upload'),
     path('timetable/merge/', TimetableMergeView.as_view(), name='timetable-merge'),
+    path('timetable/clear/', TimetableClearView.as_view(), name='timetable-clear'),
 ]

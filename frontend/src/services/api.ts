@@ -269,6 +269,11 @@ export const downloadBatchTimetable = async (id: string | number) => {
   return response.data as Blob;
 };
 
+export const clearTimetable = async (): Promise<{ deleted: number }> => {
+  const response = await api.delete('/timetable/clear/');
+  return response.data;
+};
+
 export const compactSchedule = async (
   batchId: string | number,
   day?: string | null,

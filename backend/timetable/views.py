@@ -1141,6 +1141,18 @@ class TimetableCompactView(APIView):
 
         return Response({'error': 'invalid mode'}, status=status.HTTP_400_BAD_REQUEST)
 
+class TimetableClearView(APIView):
+    permission_classes = [IsAdminUser]
+    def delete(self, request):
+        count, _ = models.ScheduleEntry.objects.all().delete()
+        try:
+            from .sse import emit_analytics_event
+            emit_analytics_event('timetable_cleared', f'Timetable cleared: {count} entries deleted', {'deleted_count': count})
+        except Exception:
+            pass
+        return Response({'deleted': count})
+
+
 class SystemConfigurationView(APIView):
     def get_permissions(self):
         if self.request.method == 'GET':

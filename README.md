@@ -3,6 +3,7 @@
 <p align="center">
   <img src="frontend/public/project.png" alt="UniScheduler Logo" width="96" />
 </p>
+it still need work on the timetable grid and the merging/unmerging logic, but the core structure and API are in place. The frontend is wired to the backend API and can display sessions, handle adjustments, and navigate to specific sessions.
 
 UniScheduler is a university timetable and scheduling application that helps administrators, teachers and students manage class sessions, rooms, teachers, and automated scheduling/adjustments. This repository contains a Django REST Framework backend and a React + Vite frontend.
 
